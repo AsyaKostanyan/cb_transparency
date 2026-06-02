@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FPAS Mark II — Central Bank Transparency Index</title>
+  <meta name="description" content="Interactive questionnaire to score central bank transparency for inflation-targeting central banks (FPAS Mark II)." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <p class="eyebrow">FPAS Mark II · The Better Policy Project</p>
+      <h1>An Index for Transparency for Inflation-Targeting Central Banks</h1>
+      <p class="lede">
+        Rate each item using the dropdown menus and add supporting evidence or notes.
+        Section subtotals and the overall transparency score update automatically.
+      </p>
+
+      <form class="meta-form" autocomplete="off">
+        <div class="field">
+          <label for="meta-name">Your name <span class="req">*</span></label>
+          <input type="text" id="meta-name" placeholder="Full name" required />
+        </div>
+        <div class="field">
+          <label for="meta-institution">Institution <span class="req">*</span></label>
+          <input type="text" id="meta-institution" placeholder="e.g., Central Bank of …" required />
+        </div>
+        <div class="field">
+          <label for="meta-job">Job title <span class="req">*</span></label>
+          <input type="text" id="meta-job" placeholder="e.g., Senior Economist" required />
+        </div>
+        <div class="field">
+          <label for="meta-email">Work email <span class="req">*</span></label>
+          <input type="email" id="meta-email" placeholder="name@institution.org" required />
+        </div>
+        <div class="field">
+          <label for="meta-bank">Central bank assessed <span class="req">*</span></label>
+          <input type="text" id="meta-bank" placeholder="Central bank being rated" required />
+        </div>
+        <div class="field">
+          <label for="meta-date">Assessment date</label>
+          <input type="date" id="meta-date" />
+        </div>
+      </form>
+    </div>
+  </header>
+
+  <!-- Sticky live score bar -->
+  <div class="scorebar" id="scorebar">
+    <div class="wrap scorebar-inner">
+      <div class="score-total">
+        <span class="score-total-value" id="total-score">0.0</span>
+        <span class="score-total-max">/ <span id="total-max">25</span></span>
+        <span class="score-total-label">Total transparency score</span>
+      </div>
+      <div class="score-sections" id="score-sections"></div>
+      <div class="score-actions">
+        <button type="button" id="btn-save" class="btn">Save</button>
+        <button type="button" id="btn-load" class="btn">Load</button>
+        <button type="button" id="btn-export" class="btn">Export CSV</button>
+        <button type="button" id="btn-print" class="btn">Print / PDF</button>
+        <button type="button" id="btn-submit" class="btn btn-primary">Submit response</button>
+        <button type="button" id="btn-reset" class="btn btn-ghost">Reset</button>
+      </div>
+    </div>
+  </div>
+
+  <main class="wrap" id="questionnaire">
+    <!-- Sections injected by app.js -->
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p>
+        FPAS Mark II — Central Bank Transparency Index · The Better Policy Project.
+        Responses are stored only in your browser (use <strong>Save</strong> to download a file).
+      </p>
+    </div>
+  </footer>
+
+  <!-- hidden file input for Load -->
+  <input type="file" id="file-input" accept="application/json" hidden />
+
+  <script src="questionnaire-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
