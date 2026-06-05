@@ -3,7 +3,7 @@
    Application logic: rendering, scoring, save/load/export
    ============================================================================= */
 
-const STORAGE_KEY = "fpas-cbt-index-v1";
+const STORAGE_KEY = "fpas-cbt-index-v2";
 
 /* =============================================================================
    SUBMISSION CONFIG
@@ -27,13 +27,43 @@ const EMPTY_META = { name: "", institution: "", job: "", email: "", bank: "", da
 /* ---- State -------------------------------------------------------------- */
 const state = {
   meta: { ...EMPTY_META },
-  framework: "scenarios",          // 'baseline' | 'scenarios' (Section B branch)
+  rd: { RD1: null, RD2: null },    // Regime Detection answers (option keys)
+  regime: null,                    // 'non-fpas' | 'mark-i' | 'mark-ii' | null
   answers: {}                      // code -> { sel, branch, custom, notes }
 };
 
+/* Derive the regime from the two diagnostic answers. */
+function computeRegime() {
+  const rd = state.rd || {};
+  if (rd.RD1 === "no") return "non-fpas";
+  if (rd.RD1 === "yes") {
+    if (rd.RD2 === "no") return "mark-i";
+    if (rd.RD2 === "yes") return "mark-ii";
+  }
+  return null;
+}
+/* Section B scale ('baseline' | 'scenarios') implied by the detected regime. */
+function regimeScale() {
+  if (!state.regime) return null;
+  const r = REGIME_DETECTION.regimes[state.regime];
+  return r ? r.scale : null;
+}
+/* Back-compat: older saves stored a manual `framework` toggle, not a regime. */
+function migrateFramework(framework) {
+  if (framework === "scenarios") return "mark-ii";
+  if (framework === "baseline") return "mark-i";
+  return null;
+}
+/* Keep the RD answers in sync with a regime set programmatically (load/migrate). */
+function reconcileRdFromRegime() {
+  if (state.regime === "non-fpas") state.rd = { RD1: "no", RD2: null };
+  else if (state.regime === "mark-i") state.rd = { RD1: "yes", RD2: "no" };
+  else if (state.regime === "mark-ii") state.rd = { RD1: "yes", RD2: "yes" };
+}
+
 /* Resolve which options array is active for a question, given current state. */
 function activeBranchKey(q) {
-  if (q.framework) return state.framework;                 // B4–B8
+  if (q.framework) return regimeScale();                   // B4–B8 (null until regime set)
   if (q.branchToggle) {                                     // A3, C4
     const ans = state.answers[q.code];
     return (ans && ans.branch) || q.branchToggle.options[0].key;
@@ -42,6 +72,7 @@ function activeBranchKey(q) {
 }
 function activeOptions(q) {
   const key = activeBranchKey(q);
+  if (q.framework) return key ? q.branches[key].options : [];  // no options until regime set
   return key ? q.branches[key].options : q.options;
 }
 
@@ -81,6 +112,9 @@ function render() {
   const main = document.getElementById("questionnaire");
   main.innerHTML = "";
 
+  // Regime Detection panel (rendered once, before the sections)
+  main.appendChild(renderRegimePanel());
+
   QUESTIONNAIRE.sections.forEach((sec) => {
     const secEl = document.createElement("section");
     secEl.className = "section";
@@ -93,43 +127,117 @@ function render() {
         <span class="sec-score" id="secscore-${sec.id}"></span>
       </div>`;
 
-    // Section B framework toggle
+    // Section B: explanatory note + read-only regime/scale banner (auto-detected)
     if (sec.id === "B") {
       const note = document.createElement("p");
       note.className = "section-note";
       note.textContent = sec.frameworkNote;
       secEl.appendChild(note);
-
-      const ft = document.createElement("div");
-      ft.className = "framework-toggle";
-      ft.innerHTML = `
-        <span class="ft-label">Framework:</span>
-        <div class="seg" id="framework-seg">
-          <button type="button" data-fw="baseline">Single baseline scenario</button>
-          <button type="button" data-fw="scenarios">Multiple (risk-management) scenarios</button>
-        </div>
-        <span class="ft-hint" style="font-size:.8rem;color:var(--muted);">Applies to B4–B8</span>`;
-      secEl.appendChild(ft);
+      secEl.appendChild(renderScaleBanner());
     }
 
     sec.questions.forEach((q) => secEl.appendChild(renderQuestion(q)));
     main.appendChild(secEl);
   });
 
-  // wire framework segment
-  const fwSeg = document.getElementById("framework-seg");
-  if (fwSeg) {
-    fwSeg.querySelectorAll("button").forEach((b) => {
-      b.addEventListener("click", () => {
-        state.framework = b.dataset.fw;
+  updateScores();
+}
+
+/* Regime Detection: two diagnostic questions that auto-classify the bank. */
+function renderRegimePanel() {
+  const RD = REGIME_DETECTION;
+  const panel = document.createElement("section");
+  panel.className = "regime-panel";
+  panel.id = "regime-panel";
+
+  panel.innerHTML = `
+    <div class="regime-head">
+      <span class="regime-step">RD</span>
+      <div>
+        <h2>${RD.title}</h2>
+        <p class="regime-sub">${RD.subtitle}</p>
+      </div>
+    </div>
+    <p class="regime-intro">${RD.intro}</p>
+    <div class="regime-questions" id="regime-questions"></div>
+    <div class="regime-result" id="regime-result"></div>`;
+
+  const qWrap = panel.querySelector("#regime-questions");
+
+  RD.questions.forEach((rq) => {
+    // Honour showWhen conditions (RD2 only appears once RD1 = yes)
+    if (rq.showWhen) {
+      const ok = Object.entries(rq.showWhen).every(([k, v]) => state.rd[k] === v);
+      if (!ok) return;
+    }
+    const card = document.createElement("div");
+    card.className = "rd-card";
+    const current = state.rd[rq.code];
+    card.innerHTML = `
+      <div class="q-top">
+        <span class="q-code">${rq.code}</span>
+        <p class="q-text">${rq.text}</p>
+      </div>
+      <div class="rd-options">
+        ${rq.options
+          .map(
+            (o) => `
+          <label class="rd-opt ${current === o.key ? "selected" : ""}">
+            <input type="radio" name="rd-${rq.code}" value="${o.key}" ${current === o.key ? "checked" : ""}/>
+            <span>${o.label}</span>
+          </label>`
+          )
+          .join("")}
+      </div>`;
+    card.querySelectorAll("input[type=radio]").forEach((input) => {
+      input.addEventListener("change", () => {
+        state.rd[rq.code] = input.value;
+        // If RD1 changes away from 'yes', RD2 no longer applies
+        if (rq.code === "RD1" && input.value !== "yes") state.rd.RD2 = null;
+        state.regime = computeRegime();
         save();
-        render();           // re-render B questions for the new branch
+        render();
       });
     });
+    qWrap.appendChild(card);
+  });
+
+  // Result badge
+  const result = panel.querySelector("#regime-result");
+  if (state.regime) {
+    const r = RD.regimes[state.regime];
+    result.innerHTML = `
+      <div class="regime-badge regime-${state.regime}">
+        <span class="regime-badge-label">Detected regime</span>
+        <strong>${r.label}</strong>
+      </div>
+      <p class="regime-desc">${r.desc}</p>`;
+  } else {
+    result.innerHTML = `<p class="regime-pending">Answer the question${state.rd.RD1 === "yes" ? "s" : ""} above to classify the regime and unlock the Section&nbsp;B scale (B4–B8).</p>`;
   }
 
-  refreshFrameworkButtons();
-  updateScores();
+  return panel;
+}
+
+/* Read-only banner shown in Section B reflecting the auto-detected scale. */
+function renderScaleBanner() {
+  const wrap = document.createElement("div");
+  wrap.className = "scale-banner";
+  if (state.regime) {
+    const r = REGIME_DETECTION.regimes[state.regime];
+    wrap.classList.add("regime-" + state.regime);
+    wrap.innerHTML = `
+      <span class="ft-label">Section B scale (B4–B8):</span>
+      <span class="scale-chip">${r.label}</span>
+      <span class="scale-detail">${r.short}</span>
+      <a href="#regime-panel" class="scale-edit">Change in Regime Detection ↑</a>`;
+  } else {
+    wrap.classList.add("scale-unset");
+    wrap.innerHTML = `
+      <span class="ft-label">Section B scale (B4–B8):</span>
+      <span class="scale-detail">Not set — <a href="#regime-panel">complete Regime Detection</a> to score B4–B8.</span>`;
+  }
+  return wrap;
 }
 
 function renderQuestion(q) {
@@ -164,6 +272,15 @@ function renderQuestion(q) {
       });
     });
     card.appendChild(wrap);
+  }
+
+  // Framework questions (B4–B8) are locked until the regime is detected.
+  if (q.framework && !state.regime) {
+    const lock = document.createElement("p");
+    lock.className = "q-locked";
+    lock.innerHTML = `Scored on the baseline or prudent risk-management scale once the regime is set — <a href="#regime-panel">complete Regime Detection</a>.`;
+    card.appendChild(lock);
+    return card;
   }
 
   // branch note (for framework questions B4–B8)
@@ -266,14 +383,6 @@ function toggleCustom(q) {
   }
 }
 
-function refreshFrameworkButtons() {
-  const fwSeg = document.getElementById("framework-seg");
-  if (!fwSeg) return;
-  fwSeg.querySelectorAll("button").forEach((b) =>
-    b.classList.toggle("active", b.dataset.fw === state.framework)
-  );
-}
-
 /* ---- Scores ------------------------------------------------------------- */
 function updateScores() {
   let total = 0, totalMax = 0;
@@ -338,6 +447,15 @@ function loadFromStorage() {
     if (!raw) return;
     const data = JSON.parse(raw);
     Object.assign(state, data);
+    if (!state.rd) state.rd = { RD1: null, RD2: null };
+    // Migrate a pre-regime save that only had a manual `framework`.
+    if (state.regime == null && data.framework) {
+      state.regime = migrateFramework(data.framework);
+      reconcileRdFromRegime();
+    }
+    // Keep the derived regime consistent with the stored RD answers.
+    if (state.regime == null) state.regime = computeRegime();
+    delete state.framework;
   } catch (e) {}
 }
 
@@ -362,12 +480,20 @@ function saveToFile() {
   save();
   const bank = (state.meta.bank || "central-bank").replace(/[^\w-]+/g, "-").toLowerCase();
   downloadFile(`cbt-index-${bank}.json`, JSON.stringify(state, null, 2), "application/json");
+  showResults();              // render charts whenever results are saved
   toast("Saved to file");
 }
 
 function exportCsv() {
   save();
-  const rows = [["Section", "Question", "Branch", "Rating", "Score", "Max", "Notes"]];
+  const regimeInfo = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  const rows = [
+    ["Central bank assessed", state.meta.bank || ""],
+    ["Detected regime", regimeInfo ? regimeInfo.label : "(not detected)"],
+    ["Section B scale", regimeInfo ? regimeInfo.short : ""],
+    [],
+    ["Section", "Question", "Branch", "Rating", "Score", "Max", "Notes"]
+  ];
   QUESTIONNAIRE.sections.forEach((sec) => {
     sec.questions.forEach((q) => {
       const ans = state.answers[q.code] || {};
@@ -404,7 +530,10 @@ function loadFromFile(file) {
     try {
       const data = JSON.parse(reader.result);
       state.meta = { ...EMPTY_META, ...(data.meta || {}) };
-      state.framework = data.framework || "scenarios";
+      state.rd = { RD1: null, RD2: null, ...(data.rd || {}) };
+      state.regime = data.regime || migrateFramework(data.framework);
+      // keep rd answers consistent with a migrated/loaded regime
+      reconcileRdFromRegime();
       state.answers = data.answers || {};
       applyMetaToForm();
       render();
@@ -415,6 +544,129 @@ function loadFromFile(file) {
     }
   };
   reader.readAsText(file);
+}
+
+/* ---- Results & charts --------------------------------------------------- */
+function levelOf(score, max) {
+  if (max <= 0) return "none";
+  if (score <= 0) return "zero";
+  if (score >= max) return "full";
+  return "partial";
+}
+
+/* Donut gauge (inline SVG). pct 0–100. */
+function donutSVG(pct, centerTop, centerSub) {
+  const r = 54, c = 2 * Math.PI * r;
+  const off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
+  return `
+    <svg viewBox="0 0 140 140" class="donut" role="img" aria-label="${centerTop} ${centerSub}">
+      <circle cx="70" cy="70" r="${r}" class="donut-track"></circle>
+      <circle cx="70" cy="70" r="${r}" class="donut-val"
+        style="stroke-dasharray:${c.toFixed(1)};stroke-dashoffset:${off.toFixed(1)};"></circle>
+      <text x="70" y="68" class="donut-pct">${centerTop}</text>
+      <text x="70" y="88" class="donut-sub">${centerSub}</text>
+    </svg>`;
+}
+
+/* Horizontal bar (score / max) with coloured fill. */
+function barRow(label, score, max, levelClass) {
+  const pct = max > 0 ? (score / max) * 100 : 0;
+  return `
+    <div class="bar-row">
+      <span class="bar-label">${label}</span>
+      <span class="bar-track"><span class="bar-fill ${levelClass}" style="width:${pct.toFixed(1)}%"></span></span>
+      <span class="bar-value">${fmt(score)} / ${fmt(max)}</span>
+    </div>`;
+}
+
+function buildResultsHTML() {
+  const sections = QUESTIONNAIRE.sections;
+  let total = 0, totalMax = 0;
+  sections.forEach((s) => { total += sectionScore(s); totalMax += sectionMax(s); });
+  const totalPct = totalMax > 0 ? (total / totalMax) * 100 : 0;
+
+  const regimeInfo = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  const regimeLabel = regimeInfo ? regimeInfo.label : "Not detected";
+
+  // Section comparison bars
+  const sectionBars = sections
+    .map((sec) => {
+      const s = sectionScore(sec), m = sectionMax(sec);
+      return barRow(`Section ${sec.id} — ${sec.title}`, s, m, "lvl-" + levelOf(s, m));
+    })
+    .join("");
+
+  // Per-question breakdown grouped by section
+  const questionGroups = sections
+    .map((sec) => {
+      const rows = sec.questions
+        .map((q) => {
+          const ans = state.answers[q.code] || {};
+          const opts = activeOptions(q);
+          const answered = ans.sel != null && opts.length > 0;
+          const score = answered ? questionScore(q) : 0;
+          // achievable max for the active regime/branch (matches the live pills)
+          const max = opts.length ? optionsMax(opts) : questionMax(q);
+          const lvl = answered ? "lvl-" + levelOf(score, max) : "lvl-na";
+          const valText = answered ? `${fmt(score)} / ${fmt(max)}` : "—";
+          const pct = answered && max > 0 ? (score / max) * 100 : 0;
+          return `
+            <div class="bar-row">
+              <span class="bar-label bar-code">${q.code}</span>
+              <span class="bar-track"><span class="bar-fill ${lvl}" style="width:${pct.toFixed(1)}%"></span></span>
+              <span class="bar-value">${valText}</span>
+            </div>`;
+        })
+        .join("");
+      return `<div class="chart-card">
+                <h4>Section ${sec.id} · ${sec.title}</h4>
+                <div class="bar-chart">${rows}</div>
+              </div>`;
+    })
+    .join("");
+
+  const meta = state.meta;
+  const subline = [meta.bank, meta.date].filter(Boolean).join(" · ");
+
+  return `
+    <div class="results-head">
+      <div>
+        <h2>Results & charts</h2>
+        <p class="results-sub">${subline || "Live snapshot of the current assessment"}</p>
+      </div>
+      <button type="button" class="btn" id="btn-results-close">Close</button>
+    </div>
+
+    <div class="results-grid">
+      <div class="chart-card gauge-card">
+        <h4>Total transparency score</h4>
+        <div class="gauge-wrap">
+          ${donutSVG(totalPct, fmt(total), "/ " + fmt(totalMax))}
+          <div class="gauge-meta">
+            <span class="gauge-pct">${Math.round(totalPct)}%</span>
+            <span class="gauge-regime regime-${state.regime || "unset"}">${regimeLabel}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="chart-card">
+        <h4>Section scores</h4>
+        <div class="bar-chart">${sectionBars}</div>
+      </div>
+    </div>
+
+    <h3 class="results-subhead">Per-question breakdown</h3>
+    <div class="results-grid">${questionGroups}</div>`;
+}
+
+function showResults() {
+  const panel = document.getElementById("results");
+  if (!panel) return;
+  panel.innerHTML = buildResultsHTML();
+  panel.classList.remove("hidden");
+  const closeBtn = document.getElementById("btn-results-close");
+  if (closeBtn) closeBtn.addEventListener("click", () => panel.classList.add("hidden"));
+  panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ---- Submit (central collection) --------------------------------------- */
@@ -472,9 +724,13 @@ function buildPayload() {
     });
   });
 
+  const regimeInfo = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  const regimeLabel = regimeInfo ? regimeInfo.label : "(not detected)";
+
   const summary =
     `FPAS Mark II — Central Bank Transparency Index\n` +
     `Central bank assessed: ${state.meta.bank}\n` +
+    `Detected regime: ${regimeLabel}\n` +
     `Respondent: ${state.meta.name}, ${state.meta.job}, ${state.meta.institution} <${state.meta.email}>\n` +
     `Date: ${state.meta.date || "(not set)"}\n\n` +
     `TOTAL SCORE: ${fmt(total)} / ${fmt(totalMax)}\n` +
@@ -491,7 +747,8 @@ function buildPayload() {
     work_email: state.meta.email,
     central_bank_assessed: state.meta.bank,
     assessment_date: state.meta.date,
-    framework: state.framework,
+    regime: regimeLabel,
+    framework: regimeScale() || "",
     total_score: fmt(total),
     total_max: fmt(totalMax),
     section_A: fmt(sectionScore(QUESTIONNAIRE.sections[0])),
@@ -534,6 +791,7 @@ async function submitResponse() {
         body: JSON.stringify(payload)
       });
       toast("Response submitted. Thank you!");
+      showResults();
     } else {
       const res = await fetch(SUBMIT_ENDPOINT, {
         method: "POST",
@@ -542,6 +800,7 @@ async function submitResponse() {
       });
       if (res.ok) {
         toast("Response submitted. Thank you!");
+        showResults();
       } else {
         throw new Error("HTTP " + res.status);
       }
@@ -561,7 +820,8 @@ async function submitResponse() {
 function resetAll() {
   if (!confirm("Clear all ratings and notes? This cannot be undone.")) return;
   state.meta = { ...EMPTY_META };
-  state.framework = "scenarios";
+  state.rd = { RD1: null, RD2: null };
+  state.regime = null;
   state.answers = {};
   try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
   applyMetaToForm();
@@ -596,6 +856,8 @@ function init() {
   });
 
   document.getElementById("btn-save").addEventListener("click", saveToFile);
+  const chartsBtn = document.getElementById("btn-charts");
+  if (chartsBtn) chartsBtn.addEventListener("click", showResults);
   document.getElementById("btn-export").addEventListener("click", exportCsv);
   document.getElementById("btn-print").addEventListener("click", () => window.print());
   document.getElementById("btn-submit").addEventListener("click", submitResponse);

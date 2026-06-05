@@ -16,8 +16,11 @@ Section subtotals and the overall transparency score update live.
 | C | Policy Process | 7 |
 | **Total** | | **25** |
 
-- **B4–B8** branch on the chosen framework (single *baseline* scenario vs. multiple
-  *risk-management* scenarios) — set with the toggle at the top of Section B.
+- **Regime Detection** is completed once at the top of the questionnaire. Two
+  diagnostic questions (RD1, RD2) classify the bank as **Non-FPAS**, **FPAS Mark I**,
+  or **FPAS Mark II**. That single classification then drives **B4–B8** automatically:
+  Non-FPAS / Mark I use the *baseline* scale (B4.1–B8.1); Mark II uses the *prudent
+  risk-management* scale (B4.2–B8.2). The scale is no longer chosen by hand.
 - **A3** branches on financial-stability responsibility; **C4** on whether decisions
   are made by a committee (MPC) or a single policymaker.
 - **B9** allows a partial score (0.1–0.9) when fewer than five financial variables
@@ -31,13 +34,16 @@ included with the saved/submitted response.
 
 ## Features
 
+- **Regime Detection** that auto-selects the Section B scale (no manual toggle)
 - Dropdown rating menus with the exact scoring rubric for every question
 - Notes box per question for links, page references, and justification
 - Live per-question, per-section, and total scores
+- **Charts** — a results panel (total gauge, section bars, per-question breakdown)
+  rendered when you Save, or any time via the **Charts** button
 - **Submit response** — sends the completed assessment to a central inbox/spreadsheet
 - **Save / Load** an assessment as a JSON file (also auto-saved in your browser)
 - **Export CSV** for analysis or archiving
-- **Print / PDF** for a clean report
+- **Print / PDF** for a clean report (includes the regime and charts)
 
 ## Collecting responses centrally
 

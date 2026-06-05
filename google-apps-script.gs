@@ -31,10 +31,13 @@ function doPost(e) {
     }
 
     // Write a header row once.
+    // NOTE: if you are upgrading an existing sheet that already has a header row,
+    // insert a "Regime" column after "Assessment date" (or clear row 1 so this
+    // header is rewritten) to keep columns aligned with the data below.
     if (sheet.getLastRow() === 0) {
       sheet.appendRow([
         "Received", "Name", "Institution", "Job title", "Work email",
-        "Central bank assessed", "Assessment date", "Framework",
+        "Central bank assessed", "Assessment date", "Regime", "Section B scale",
         "Total score", "Total max", "Section A", "Section B", "Section C",
         "Summary", "Full JSON"
       ]);
@@ -48,6 +51,7 @@ function doPost(e) {
       data.work_email || "",
       data.central_bank_assessed || "",
       data.assessment_date || "",
+      data.regime || "",
       data.framework || "",
       data.total_score || "",
       data.total_max || "",

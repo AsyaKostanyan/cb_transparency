@@ -6,13 +6,73 @@
      id, code, text, and either:
        - options: [{label, score}]                      (simple question)
        - branches: { key: {label, note, options:[...]} } (conditional question)
-   Branch selection for Section B (baseline vs scenarios) is controlled by a
-   single framework toggle; A3 and C4 have their own per-question toggle.
+   Branch selection for Section B (baseline vs scenarios) is no longer a manual
+   toggle: it is determined ONCE by the Regime Detection step (see
+   REGIME_DETECTION below), which classifies the bank as Non-FPAS, FPAS Mark I,
+   or FPAS Mark II and routes B4–B8 to the matching scale automatically.
+   A3 and C4 still have their own per-question toggle.
    ============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Regime Detection — completed once, before scoring Section B.
+   Two diagnostic questions (RD1, RD2) classify the bank into exactly one of
+   three regimes; that classification fixes which scale B4–B8 use:
+     • Non-FPAS    → baseline scale (B4.1–B8.1)  — scores low on Section B
+     • FPAS Mark I → baseline scale (B4.1–B8.1)
+     • FPAS Mark II→ prudent risk-management scale (B4.2–B8.2)
+   --------------------------------------------------------------------------- */
+const REGIME_DETECTION = {
+  title: "Regime Detection",
+  subtitle: "Complete once, before scoring Section B",
+  intro:
+    "Classify the central bank's published forecasting and projection framework into exactly one of the three regimes below. " +
+    "This classification is made once and determines which scale is applied to questions B4–B8. " +
+    "Sections A and C, and questions B1–B3 and B9, are scored identically regardless of regime.",
+  questions: [
+    {
+      code: "RD1",
+      text: "Does the central bank publish projections in which the policy interest rate is an endogenous output of the model — i.e., a path that responds within the model to the projected evolution of the economy — rather than a constant-rate or externally imposed (exogenous) path?",
+      options: [
+        { key: "no", label: "No — projections use a constant or exogenous policy-rate assumption.", routeTo: "non-fpas" },
+        { key: "yes", label: "Yes — the policy path is endogenous.", routeTo: "RD2" }
+      ]
+    },
+    {
+      code: "RD2",
+      text: "Does the central bank regularly publish a structured set of multiple scenarios (e.g., Case A and Case B, or Case X and Case Y) / prudent risk-management scenarios, each with its own consistent macroeconomic and policy paths, rather than a single baseline projection?",
+      showWhen: { RD1: "yes" },
+      options: [
+        { key: "no", label: "No — a single baseline projection is published.", routeTo: "mark-i" },
+        { key: "yes", label: "Yes — a structured set of scenarios is published.", routeTo: "mark-ii" }
+      ]
+    }
+  ],
+  // Resulting regime → Section B scale and descriptive note.
+  regimes: {
+    "non-fpas": {
+      label: "Non-FPAS",
+      scale: "baseline",
+      short: "Baseline scale (B4.1–B8.1)",
+      desc: "Policy path is constant/exogenous; not a genuine FPAS in the sense used here. Scored on the baseline scale (B4.1–B8.1) — the bank cannot attain the endogenous-policy-path gradations and will therefore score low on Section B."
+    },
+    "mark-i": {
+      label: "FPAS Mark I",
+      scale: "baseline",
+      short: "Baseline scale (B4.1–B8.1)",
+      desc: "A single baseline projection with an endogenous policy path. Scored on the baseline scale (B4.1–B8.1)."
+    },
+    "mark-ii": {
+      label: "FPAS Mark II",
+      scale: "scenarios",
+      short: "Prudent risk-management scale (B4.2–B8.2)",
+      desc: "A structured set of multiple / prudent risk-management scenarios with associated policy paths. Scored on the prudent risk-management scale (B4.2–B8.2)."
+    }
+  }
+};
 
 const QUESTIONNAIRE = {
   title: "An Index for Transparency for Inflation-Targeting Central Banks",
-  subtitle: "FPAS Mark II — Central Bank Transparency Index (Updated Version)",
+  subtitle: "FPAS Mark II — Central Bank Transparency Index (Updated Version, with consolidated regime detection)",
   sections: [
     {
       id: "A",
@@ -32,13 +92,13 @@ const QUESTIONNAIRE = {
           text: "Is the inflation target defined clearly?",
           options: [
             { label: "No medium-term numerical target over a horizon of 2–3 years or more (hereafter medium term).", score: 0.0 },
-            { label: "Inflation target defined as a \"tolerance\" or \"control range\" target. Defined as a medium-term target, however the meaning of the range or the band is not clear.", score: 0.5 },
+            { label: "Inflation target defined as a \"tolerance\" or \"control range\" target. Defined as a medium-term target, but the meaning of the range or band is not clear.", score: 0.5 },
             { label: "Inflation target defined as a well-defined point target. If a band is used, it is clearly communicated.", score: 1.0 }
           ]
         },
         {
           code: "A3",
-          text: "Might financial stability objectives override the primacy of the inflation (price stability) objective? If the central bank has no financial stability responsibility, it should be explicit that it uses the policy interest rate tool to affect financial conditions to the extent that it affects the output gap and, hence, achieving the inflation target.",
+          text: "Might financial stability objectives override the primacy of the inflation (price stability) objective? If the central bank does not have a financial stability responsibility, it should be explicit that it uses the policy interest rate tool to affect financial conditions to the extent that it affects the output gap and, hence, achieving the inflation target.",
           branchToggle: {
             label: "Financial stability responsibility",
             options: [
@@ -75,15 +135,15 @@ const QUESTIONNAIRE = {
       id: "B",
       title: "Forecasting and Policy Analysis System",
       maxNote: "Max. Score 14",
-      frameworkNote: "Questions B4–B8 branch on whether the central bank publishes a single baseline scenario or multiple (prudent risk-management) scenarios. Set the framework below.",
+      frameworkNote: "Questions B1–B3 and B9 apply to all regimes. For B4–B8 the scale is set automatically by the Regime Detection step above: the baseline scale (Non-FPAS / FPAS Mark I) or the prudent risk-management scale (FPAS Mark II).",
       questions: [
         {
           code: "B1",
-          text: "Are the basic economic data relevant for the conduct of monetary policy publicly available in a downloadable format from the central bank's website (could also include links to other statistical agencies)?",
+          text: "Are the basic economic data relevant for the conduct of monetary policy publicly available in a downloadable format from the central bank's website (could also include links to other statistical agencies)? For example, data reported in the monetary policy reports should be made available on the website.",
           options: [
             { label: "No database is publicly available.", score: 0.0 },
             { label: "A minimal set of series is publicly available: output gap or other measure of capacity utilization, inflation, inflation expectations, wages, unemployment, and GDP.", score: 0.5 },
-            { label: "All series used in producing the MPR are published in a downloadable format (e.g., Excel). These include at least the seven series above.", score: 1.0 }
+            { label: "All series used in producing the MPR are published in a downloadable format (e.g., Excel), including at least the seven series above.", score: 1.0 }
           ]
         },
         {
@@ -98,7 +158,7 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B3",
-          text: "How transparent is the central bank about the reaction functions (or loss functions) used to compute the interest rate paths in their regular projection exercises? Do the monetary policy reports reference the core model documentation containing the reaction/loss function?",
+          text: "How transparent is the central bank about the reaction functions (or loss functions) used to compute the interest rate paths (or paths for other instruments when the ELB constrains the policy rate) in its regular projection exercises? Do the monetary policy reports reference the core model documentation containing the reaction function or loss function?",
           options: [
             { label: "The central bank does not publish either the reaction function or the loss function.", score: 0.0 },
             { label: "The central bank publishes the reaction function and/or loss function (with the coefficients) in an easily accessible place on its website.", score: 1.0 }
@@ -110,7 +170,7 @@ const QUESTIONNAIRE = {
           framework: true,
           branches: {
             baseline: {
-              note: "B4.1 — Baseline Scenario",
+              note: "Baseline scale (B4.1) — Non-FPAS / FPAS Mark I (for the baseline scenario)",
               options: [
                 { label: "None.", score: 0.0 },
                 { label: "Inflation.", score: 0.2 },
@@ -121,7 +181,7 @@ const QUESTIONNAIRE = {
               ]
             },
             scenarios: {
-              note: "B4.2 — Prudent Risk-Management Scenarios",
+              note: "Prudent risk-management scale (B4.2) — FPAS Mark II (across the published scenarios)",
               options: [
                 { label: "None.", score: 1.0 },
                 { label: "Inflation.", score: 1.2 },
@@ -135,11 +195,11 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B5",
-          text: "Does the central bank communicate forecast uncertainty (fan charts / forecast densities), or thoroughly discuss assumptions and shocks related to risk-management scenarios?",
+          text: "How does the central bank communicate forecast uncertainty?",
           framework: true,
           branches: {
             baseline: {
-              note: "B5.1 — Baseline Scenario (forecast densities / fan charts)",
+              note: "Baseline scale (B5.1) — Non-FPAS / FPAS Mark I: does the central bank regularly publish forecast densities (fan charts)?",
               options: [
                 { label: "None.", score: 0.0 },
                 { label: "Inflation.", score: 0.2 },
@@ -150,7 +210,7 @@ const QUESTIONNAIRE = {
               ]
             },
             scenarios: {
-              note: "B5.2 — Prudent Risk-Management Scenarios (assumptions & shocks)",
+              note: "Prudent risk-management scale (B5.2) — FPAS Mark II: does it thoroughly discuss the assumptions and shocks underlying its risk-management scenarios?",
               options: [
                 { label: "Qualitative / general description.", score: 1.0 },
                 { label: "Inflation.", score: 1.2 },
@@ -164,18 +224,18 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B6",
-          text: "Is the underlying methodology for constructing the forecast densities (fan charts) — or the prudent risk-management scenarios — clear and easily accessible?",
+          text: "Is the methodology underlying the central bank's treatment of uncertainty clear and easily accessible?",
           framework: true,
           branches: {
             baseline: {
-              note: "B6.1 — Baseline Scenario (fan chart methodology)",
+              note: "Baseline scale (B6.1) — Non-FPAS / FPAS Mark I: methodology for constructing the forecast densities (fan charts).",
               options: [
-                { label: "No fan chart, or the fan chart methodology is not explained.", score: 0.0 },
+                { label: "No fan chart, or the fan-chart methodology is not explained.", score: 0.0 },
                 { label: "Fan charts published in all monetary policy reports and the methodology is clearly explained and/or a link to a technical paper is provided.", score: 1.0 }
               ]
             },
             scenarios: {
-              note: "B6.2 — Prudent Risk-Management Scenarios (methodology, taxonomy of shocks, etc.)",
+              note: "Prudent risk-management scale (B6.2) — FPAS Mark II: methodology for constructing the prudent risk-management scenarios (model documentation, taxonomy of shocks, etc.).",
               options: [
                 { label: "No.", score: 1.0 },
                 { label: "Yes.", score: 2.0 }
@@ -185,11 +245,11 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B7",
-          text: "Does the central bank regularly (at least once a year) publish an assessment of forecast revisions / review its forecasting performance, in the monetary policy reports or a separate document?",
+          text: "Does the central bank regularly (at least once a year) review its forecasts in the monetary policy reports or in a separate document?",
           framework: true,
           branches: {
             baseline: {
-              note: "B7.1 — Baseline Scenario (decomposition of forecast changes)",
+              note: "Baseline scale (B7.1) — Non-FPAS / FPAS Mark I: assessment of forecast revisions (decomposition of forecast changes vis-à-vis the previous forecast).",
               options: [
                 { label: "No.", score: 0.0 },
                 { label: "For inflation only, with a discussion of the underlying causes.", score: 0.2 },
@@ -200,10 +260,10 @@ const QUESTIONNAIRE = {
               ]
             },
             scenarios: {
-              note: "B7.2 — Prudent Risk-Management Scenarios (forecasting performance review)",
+              note: "Prudent risk-management scale (B7.2) — FPAS Mark II: review of forecasting performance (at least for the market-reference scenario).",
               options: [
                 { label: "No.", score: 0.0 },
-                { label: "Yes. Qualitative / general evaluation of scenarios and assumptions.", score: 1.0 },
+                { label: "Yes — qualitative / general evaluation of the scenarios and assumptions.", score: 1.0 },
                 { label: "For inflation only, with a discussion of the underlying causes.", score: 1.2 },
                 { label: "For inflation and GDP growth, with a discussion of the underlying causes.", score: 1.4 },
                 { label: "For inflation, GDP growth, and the endogenous interest rate path, with a discussion of the underlying causes.", score: 1.6 },
@@ -215,18 +275,18 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B8",
-          text: "Does the central bank publish alternative scenarios in their monetary policy reports to illustrate key risk(s) in the baseline forecast? Or does it publish a market-reference scenario?",
+          text: "Does the central bank publish alternative scenarios in its monetary policy reports to illustrate key risk(s) in the forecast?",
           framework: true,
           branches: {
             baseline: {
-              note: "B8.1 — Baseline Scenario",
+              note: "Baseline scale (B8.1) — Non-FPAS / FPAS Mark I",
               options: [
                 { label: "No alternative scenario.", score: 0.0 },
                 { label: "The major risk(s) is communicated in an alternative scenario(s).", score: 1.0 }
               ]
             },
             scenarios: {
-              note: "B8.2 — Prudent Risk-Management Scenarios",
+              note: "Prudent risk-management scale (B8.2) — FPAS Mark II",
               options: [
                 { label: "No alternative scenario.", score: 0.0 },
                 { label: "The major risk(s) is communicated in an alternative scenario(s).", score: 1.0 },
@@ -237,7 +297,7 @@ const QUESTIONNAIRE = {
         },
         {
           code: "B9",
-          text: "Do the monetary policy reports include historical data and forecasts for financial variables (long-term government bond yields, consumer lending rates, mortgage rates, equity prices, property prices, credit aggregates, corporate risky spreads, credit standards)? All data should be available in a downloadable format.",
+          text: "Do the monetary policy reports include historical data and forecasts for financial variables? Financial variables include long-term government bond yields, consumer lending rates, mortgage rates, equity prices, property prices, credit aggregates, corporate risky spreads (e.g., BAA–AAA bond yields), and credit standards (e.g., loan officer surveys). All data should be available in a downloadable format.",
           options: [
             { label: "No data or forecast of financial variables are available.", score: 0.0 },
             { label: "Historical data on fewer than 5 of the above variables, and forecasts for fewer than 5 — partial (specify 0.1–0.9).", score: null, custom: { min: 0.1, max: 0.9, step: 0.1, default: 0.5 } },
@@ -265,8 +325,8 @@ const QUESTIONNAIRE = {
           text: "Is the policy decision explained at a press conference immediately after it is announced? Are the presentations available in English?",
           options: [
             { label: "No.", score: 0.0 },
-            { label: "Yes, after all policy meetings, at pre-announced dates/times; press conference with Q&A is webcast and recorded. Presentations available in downloadable form only in the native language.", score: 0.5 },
-            { label: "Yes, after all policy meetings, at pre-announced dates/times; press conference with Q&A is webcast and recorded. Presentations available in downloadable form in English.", score: 1.0 }
+            { label: "Yes, after all policy meetings, at pre-announced dates and times. The press conference with Q&A is webcast and the recording is made available on the website. Presentations are downloadable only in the native language.", score: 0.5 },
+            { label: "Yes, after all policy meetings, at pre-announced dates and times. The press conference with Q&A is webcast and the recording is made available on the website. Presentations are downloadable in English.", score: 1.0 }
           ]
         },
         {
@@ -293,8 +353,8 @@ const QUESTIONNAIRE = {
               options: [
                 { label: "No.", score: 0.0 },
                 { label: "Yes, but condensed, non-attributed, and without voting results.", score: 0.5 },
-                { label: "Yes, detailed and with voting results on the main policy instrument. Contributions by individual MPC members and votes are not attributed.", score: 0.75 },
-                { label: "Yes, detailed and with voting results on the main policy instrument. Contributions by individual MPC members and votes are attributed.", score: 1.0 }
+                { label: "Yes, detailed and with voting results on the main policy instrument. Contributions by individual MPC members and votes are not attributed.", score: 1.0 },
+                { label: "Yes, detailed and with voting results on the main policy instrument. Contributions by individual MPC members and votes are attributed.", score: 2.0 }
               ]
             },
             single: {

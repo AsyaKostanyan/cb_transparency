@@ -58,6 +58,7 @@
       <div class="score-actions">
         <button type="button" id="btn-save" class="btn">Save</button>
         <button type="button" id="btn-load" class="btn">Load</button>
+        <button type="button" id="btn-charts" class="btn">Charts</button>
         <button type="button" id="btn-export" class="btn">Export CSV</button>
         <button type="button" id="btn-print" class="btn">Print / PDF</button>
         <button type="button" id="btn-submit" class="btn btn-primary">Submit response</button>
@@ -67,8 +68,11 @@
   </div>
 
   <main class="wrap" id="questionnaire">
-    <!-- Sections injected by app.js -->
+    <!-- Regime detection + sections injected by app.js -->
   </main>
+
+  <!-- Results & charts (populated on Save / Charts) -->
+  <section class="wrap results hidden" id="results" aria-live="polite"></section>
 
   <footer class="site-footer">
     <div class="wrap">
