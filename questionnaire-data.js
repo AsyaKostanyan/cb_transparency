@@ -53,7 +53,10 @@ const REGIME_DETECTION = {
       label: "Non-FPAS",
       scale: "baseline",
       short: "Baseline scale (B4.1–B8.1)",
-      desc: "Policy path is constant/exogenous; not a genuine FPAS in the sense used here. Scored on the baseline scale (B4.1–B8.1) — the bank cannot attain the endogenous-policy-path gradations and will therefore score low on Section B."
+      // Without a forecasting/projection system these Section B items cannot be
+      // met and are scored 0 automatically; only B2 and B9 remain rated.
+      autoZero: ["B1", "B3", "B4", "B5", "B6", "B7", "B8"],
+      desc: "Policy path is constant/exogenous; not a genuine FPAS in the sense used here. In Section B, items B1 and B3–B8 are scored 0 automatically — only B2 (model documentation) and B9 (financial-variable data) are rated, so the bank scores low on Section B."
     },
     "mark-i": {
       label: "FPAS Mark I",

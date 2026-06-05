@@ -61,6 +61,15 @@ function reconcileRdFromRegime() {
   else if (state.regime === "mark-ii") state.rd = { RD1: "yes", RD2: "yes" };
 }
 
+/* Codes the current regime forces to 0 (e.g. Non-FPAS zeroes most of Section B). */
+function autoZeroCodes() {
+  const r = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  return (r && r.autoZero) || [];
+}
+function isAutoZeroed(q) {
+  return autoZeroCodes().indexOf(q.code) !== -1;
+}
+
 /* Resolve which options array is active for a question, given current state. */
 function activeBranchKey(q) {
   if (q.framework) return regimeScale();                   // B4–B8 (null until regime set)
@@ -78,6 +87,7 @@ function activeOptions(q) {
 
 /* Score for one question (number) and its max (number). */
 function questionScore(q) {
+  if (isAutoZeroed(q)) return 0;                 // forced 0 under the active regime
   const ans = state.answers[q.code] || {};
   const opts = activeOptions(q);
   let score = 0;
@@ -250,6 +260,19 @@ function renderQuestion(q) {
       <span class="q-code">${q.code}</span>
       <p class="q-text">${q.text}</p>
     </div>`;
+
+  // Auto-zeroed under the active regime (e.g. Non-FPAS): locked at 0, read-only.
+  if (isAutoZeroed(q)) {
+    card.classList.add("q-card-zeroed");
+    const r = REGIME_DETECTION.regimes[state.regime];
+    const note = document.createElement("div");
+    note.className = "q-autozero";
+    note.innerHTML = `
+      <span class="q-score-pill scored-0">${fmt(0)}</span>
+      <p>Automatically scored <strong>0</strong> under the <strong>${r.label}</strong> regime. In Section&nbsp;B, only <strong>B2</strong> and <strong>B9</strong> are rated for ${r.label} banks.</p>`;
+    card.appendChild(note);
+    return card;
+  }
 
   // per-question branch toggle (A3, C4)
   if (q.branchToggle) {
@@ -498,14 +521,18 @@ function exportCsv() {
     sec.questions.forEach((q) => {
       const ans = state.answers[q.code] || {};
       const opts = activeOptions(q);
+      const az = isAutoZeroed(q);
       const chosen = ans.sel != null ? opts[ans.sel] : null;
       const branch = activeBranchKey(q) || "";
+      const rating = az
+        ? `Automatically 0 (${regimeInfo ? regimeInfo.label : "regime rule"})`
+        : (chosen ? chosen.label : "");
       rows.push([
         sec.id,
         q.code,
         branch,
-        chosen ? chosen.label : "",
-        ans.sel != null ? fmt(questionScore(q)) : "",
+        rating,
+        (az || ans.sel != null) ? fmt(questionScore(q)) : "",
         fmt(questionMax(q)),
         ans.notes || ""
       ]);
@@ -603,8 +630,9 @@ function buildResultsHTML() {
         .map((q) => {
           const ans = state.answers[q.code] || {};
           const opts = activeOptions(q);
-          const answered = ans.sel != null && opts.length > 0;
-          const score = answered ? questionScore(q) : 0;
+          const az = isAutoZeroed(q);
+          const answered = az || (ans.sel != null && opts.length > 0);
+          const score = az ? 0 : (answered ? questionScore(q) : 0);
           // achievable max for the active regime/branch (matches the live pills)
           const max = opts.length ? optionsMax(opts) : questionMax(q);
           const lvl = answered ? "lvl-" + levelOf(score, max) : "lvl-na";
@@ -713,12 +741,13 @@ function buildPayload() {
     sec.questions.forEach((q) => {
       const ans = state.answers[q.code] || {};
       const opts = activeOptions(q);
+      const az = isAutoZeroed(q);
       const chosen = ans.sel != null ? opts[ans.sel] : null;
       answerRows.push({
         q: q.code,
         branch: activeBranchKey(q) || "",
-        rating: chosen ? chosen.label : "(not answered)",
-        score: ans.sel != null ? fmt(questionScore(q)) : "",
+        rating: az ? "Automatically 0 (regime rule)" : (chosen ? chosen.label : "(not answered)"),
+        score: (az || ans.sel != null) ? fmt(questionScore(q)) : "",
         notes: ans.notes || ""
       });
     });

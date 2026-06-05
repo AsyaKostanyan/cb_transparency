@@ -21,6 +21,9 @@ Section subtotals and the overall transparency score update live.
   or **FPAS Mark II**. That single classification then drives **B4–B8** automatically:
   Non-FPAS / Mark I use the *baseline* scale (B4.1–B8.1); Mark II uses the *prudent
   risk-management* scale (B4.2–B8.2). The scale is no longer chosen by hand.
+  For **Non-FPAS** banks, Section B items **B1 and B3–B8 are automatically scored 0**
+  (locked, read-only) since they require a forecasting system; only **B2** and **B9**
+  are rated.
 - **A3** branches on financial-stability responsibility; **C4** on whether decisions
   are made by a committee (MPC) or a single policymaker.
 - **B9** allows a partial score (0.1–0.9) when fewer than five financial variables
