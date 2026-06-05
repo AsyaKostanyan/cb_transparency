@@ -5,7 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FPAS Mark II — Central Bank Transparency Index</title>
   <meta name="description" content="Interactive questionnaire to score central bank transparency for inflation-targeting central banks (FPAS Mark II)." />
-  <link rel="stylesheet" href="styles.css" />
+  <!-- Auto cache-busting loader: append a unique tag to every asset so the
+       browser always fetches the latest CSS/JS — no manual cache clearing
+       needed after an update. -->
+  <script>
+    (function () {
+      var v = Date.now();
+      var head = document.head;
+      var css = document.createElement("link");
+      css.rel = "stylesheet";
+      css.href = "styles.css?v=" + v;
+      head.appendChild(css);
+      ["questionnaire-data.js", "app.js"].forEach(function (src) {
+        var s = document.createElement("script");
+        s.src = src + "?v=" + v;
+        s.async = false; // preserve order: data before app
+        head.appendChild(s);
+      });
+    })();
+  </script>
+  <noscript><link rel="stylesheet" href="styles.css" /></noscript>
 </head>
 <body>
   <header class="site-header">
@@ -86,7 +105,7 @@
   <!-- hidden file input for Load -->
   <input type="file" id="file-input" accept="application/json" hidden />
 
-  <script src="questionnaire-data.js"></script>
-  <script src="app.js"></script>
+  <!-- questionnaire-data.js and app.js are injected by the cache-busting
+       loader in <head> so updates always load fresh. -->
 </body>
 </html>

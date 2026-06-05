@@ -871,4 +871,9 @@ function init() {
   });
 }
 
-document.addEventListener("DOMContentLoaded", init);
+/* The loader injects this script dynamically, so the DOM may already be ready. */
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
