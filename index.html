@@ -79,7 +79,7 @@
         <button type="button" id="btn-load" class="btn">Load</button>
         <button type="button" id="btn-charts" class="btn">Charts</button>
         <button type="button" id="btn-export" class="btn">Export CSV</button>
-        <button type="button" id="btn-print" class="btn">Print / PDF</button>
+        <button type="button" id="btn-print" class="btn">PDF report</button>
         <button type="button" id="btn-submit" class="btn btn-primary">Submit response</button>
         <button type="button" id="btn-reset" class="btn btn-ghost">Reset</button>
       </div>
@@ -92,6 +92,9 @@
 
   <!-- Results & charts (populated on Save / Charts) -->
   <section class="wrap results hidden" id="results" aria-live="polite"></section>
+
+  <!-- Print-only report (populated on PDF report) -->
+  <div id="report" class="report" aria-hidden="true"></div>
 
   <footer class="site-footer">
     <div class="wrap">

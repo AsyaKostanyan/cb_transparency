@@ -117,6 +117,12 @@ function sectionMax(sec) {
 
 const fmt = (n) => (Math.round(n * 100) / 100).toFixed(2).replace(/\.00$/, ".0").replace(/(\.\d)0$/, "$1");
 
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 /* ---- Rendering ---------------------------------------------------------- */
 function render() {
   const main = document.getElementById("questionnaire");
@@ -697,6 +703,125 @@ function showResults() {
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+/* ---- Printable PDF report ---------------------------------------------- */
+function buildReportHTML() {
+  const sections = QUESTIONNAIRE.sections;
+  let total = 0, totalMax = 0;
+  sections.forEach((s) => { total += sectionScore(s); totalMax += sectionMax(s); });
+  const totalPct = totalMax > 0 ? (total / totalMax) * 100 : 0;
+
+  const ri = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  const regimeLabel = ri ? ri.label : "Not detected";
+  const m = state.meta;
+
+  const sectionBars = sections
+    .map((sec) => {
+      const s = sectionScore(sec), mx = sectionMax(sec);
+      return barRow(`Section ${sec.id} — ${sec.title}`, s, mx, "lvl-" + levelOf(s, mx));
+    })
+    .join("");
+
+  const sectionDetail = sections
+    .map((sec) => {
+      const qHtml = sec.questions
+        .map((q) => {
+          const ans = state.answers[q.code] || {};
+          const opts = activeOptions(q);
+          const az = isAutoZeroed(q);
+          const chosen = (!az && ans.sel != null) ? opts[ans.sel] : null;
+          const answered = az || ans.sel != null;
+          const score = answered ? questionScore(q) : null;
+          const max = opts.length ? optionsMax(opts) : questionMax(q);
+          const lvl = answered ? levelOf(score, max) : "na";
+          const scoreText = answered ? `${fmt(score)} / ${fmt(max)}` : `— / ${fmt(max)}`;
+          const ratingText = az
+            ? `Automatically 0 — ${regimeLabel} regime`
+            : (chosen ? chosen.label : "Not answered");
+          const branch = activeBranchKey(q);
+          const branchNote = (branch && q.branches && q.branches[branch] && q.branches[branch].note)
+            ? `<p class="rep-q-branch">${escapeHtml(q.branches[branch].note)}</p>` : "";
+          const notes = (ans.notes || "").trim();
+          return `
+            <div class="rep-q">
+              <div class="rep-q-head">
+                <span class="rep-q-code">${q.code}</span>
+                <span class="rep-q-score lvl-${lvl}">${scoreText}</span>
+              </div>
+              <p class="rep-q-text">${escapeHtml(q.text)}</p>
+              ${branchNote}
+              <p class="rep-q-rating">${escapeHtml(ratingText)}</p>
+              ${notes ? `<p class="rep-q-notes"><strong>Evidence / notes:</strong> ${escapeHtml(notes)}</p>` : ""}
+            </div>`;
+        })
+        .join("");
+      return `
+        <section class="rep-section">
+          <h3>Section ${sec.id} · ${sec.title}
+            <span class="rep-sec-score">${fmt(sectionScore(sec))} / ${fmt(sectionMax(sec))}</span>
+          </h3>
+          ${qHtml}
+        </section>`;
+    })
+    .join("");
+
+  const metaRow = (label, val) =>
+    `<div><span>${label}</span>${escapeHtml(val || "—")}</div>`;
+
+  return `
+    <div class="rep-cover">
+      <p class="rep-eyebrow">FPAS Mark II · The Better Policy Project</p>
+      <h1>An Index for Transparency for Inflation-Targeting Central Banks</h1>
+      <h2 class="rep-bank">${escapeHtml(m.bank || "(central bank)")}</h2>
+      <div class="rep-meta">
+        ${metaRow("Respondent", [m.name, m.job].filter(Boolean).join(", "))}
+        ${metaRow("Institution", m.institution)}
+        ${metaRow("Email", m.email)}
+        ${metaRow("Assessment date", m.date)}
+        ${metaRow("Detected regime", regimeLabel)}
+      </div>
+    </div>
+
+    <div class="rep-overview">
+      <div class="rep-gauge">
+        ${donutSVG(totalPct, fmt(total), "/ " + fmt(totalMax))}
+        <div class="rep-gauge-meta">
+          <div class="rep-total">${fmt(total)} <span>/ ${fmt(totalMax)}</span></div>
+          <div class="rep-pct">${Math.round(totalPct)}% overall transparency</div>
+          <div class="rep-regime regime-${state.regime || "unset"}">${regimeLabel}</div>
+        </div>
+      </div>
+      <div class="rep-bars">
+        <h3>Section scores</h3>
+        <div class="bar-chart">${sectionBars}</div>
+      </div>
+    </div>
+
+    ${ri ? `<p class="rep-regime-note">${escapeHtml(ri.desc)}</p>` : ""}
+
+    <h2 class="rep-detail-head">Detailed responses</h2>
+    ${sectionDetail}
+
+    <p class="rep-foot">FPAS Mark II — Central Bank Transparency Index · The Better Policy Project</p>`;
+}
+
+function printReport() {
+  save();
+  const rep = document.getElementById("report");
+  if (!rep) { window.print(); return; }
+  rep.innerHTML = buildReportHTML();
+  document.body.classList.add("report-mode");
+  let done = false;
+  const cleanup = () => {
+    if (done) return;
+    done = true;
+    document.body.classList.remove("report-mode");
+    window.removeEventListener("afterprint", cleanup);
+  };
+  window.addEventListener("afterprint", cleanup);
+  setTimeout(cleanup, 60000); // safety net if afterprint never fires
+  window.print();
+}
+
 /* ---- Submit (central collection) --------------------------------------- */
 const REQUIRED_META = [
   { f: "name", label: "Your name" },
@@ -899,7 +1024,7 @@ function init() {
   const chartsBtn = document.getElementById("btn-charts");
   if (chartsBtn) chartsBtn.addEventListener("click", showResults);
   document.getElementById("btn-export").addEventListener("click", exportCsv);
-  document.getElementById("btn-print").addEventListener("click", () => window.print());
+  document.getElementById("btn-print").addEventListener("click", printReport);
   document.getElementById("btn-submit").addEventListener("click", submitResponse);
   document.getElementById("btn-reset").addEventListener("click", resetAll);
 

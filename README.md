@@ -46,7 +46,10 @@ included with the saved/submitted response.
 - **Submit response** — sends the completed assessment to a central inbox/spreadsheet
 - **Save / Load** an assessment as a JSON file (also auto-saved in your browser)
 - **Export CSV** for analysis or archiving
-- **Print / PDF** for a clean report (includes the regime and charts)
+- **PDF report** — a polished, self-contained document (cover page with bank /
+  respondent / regime, total gauge, section charts, and every question with its
+  score, chosen rating, and evidence/notes). Click **PDF report**, then choose
+  *Save as PDF* in the print dialog
 
 ## Collecting responses centrally
 
