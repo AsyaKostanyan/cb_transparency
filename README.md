@@ -80,6 +80,21 @@ Export CSV still work). Pick **one** of the two options below.
    (Apps Script web apps don't send CORS headers, so the page submits
    fire-and-forget; rows still land in your sheet.)
 
+Each submission is written as **one row spread across many columns** — the
+respondent/meta fields, the regime, section and total scores, then **one numeric
+column per question** (`A1 … C6`) followed by **one notes column per question**
+(`A1 — notes …`), and finally the readable `Summary` and full `responses_json`.
+This makes the data easy to sort, average, and chart directly in the sheet.
+
+Rows are written to a dedicated tab named **Responses** (created automatically).
+The header is written once, the first time that tab is empty.
+
+**Upgrading an existing backend:** after pasting the new code, redeploy so the
+live URL runs it — **Deploy → Manage deployments → (edit, pencil) → Version: New
+version → Deploy**. The `/exec` URL stays the same. Old single-cell data on your
+original tab is left untouched; new submissions go to the **Responses** tab. To
+start clean, delete the **Responses** tab and it is recreated on the next submit.
+
 ## Files
 
 ```

@@ -732,8 +732,12 @@ function validateRespondent() {
 /* Build a flat, human-readable payload (good for Formspree/Sheets columns) +
    the full machine-readable state as a JSON string. */
 function buildPayload() {
+  const round2 = (n) => Math.round(n * 100) / 100;
   let total = 0, totalMax = 0;
   const sectionLines = [], answerRows = [];
+  const codes = [];                 // ordered question codes (A1 … C6)
+  const scores = {};                // code -> numeric score ("" if unanswered)
+  const notes = {};                 // code -> evidence/notes text
   QUESTIONNAIRE.sections.forEach((sec) => {
     const s = sectionScore(sec), m = sectionMax(sec);
     total += s; totalMax += m;
@@ -743,11 +747,15 @@ function buildPayload() {
       const opts = activeOptions(q);
       const az = isAutoZeroed(q);
       const chosen = ans.sel != null ? opts[ans.sel] : null;
+      const answered = az || ans.sel != null;
+      codes.push(q.code);
+      scores[q.code] = answered ? round2(questionScore(q)) : "";
+      notes[q.code] = ans.notes || "";
       answerRows.push({
         q: q.code,
         branch: activeBranchKey(q) || "",
         rating: az ? "Automatically 0 (regime rule)" : (chosen ? chosen.label : "(not answered)"),
-        score: (az || ans.sel != null) ? fmt(questionScore(q)) : "",
+        score: answered ? fmt(questionScore(q)) : "",
         notes: ans.notes || ""
       });
     });
@@ -778,11 +786,14 @@ function buildPayload() {
     assessment_date: state.meta.date,
     regime: regimeLabel,
     framework: regimeScale() || "",
-    total_score: fmt(total),
-    total_max: fmt(totalMax),
-    section_A: fmt(sectionScore(QUESTIONNAIRE.sections[0])),
-    section_B: fmt(sectionScore(QUESTIONNAIRE.sections[1])),
-    section_C: fmt(sectionScore(QUESTIONNAIRE.sections[2])),
+    total_score: round2(total),
+    total_max: round2(totalMax),
+    section_A: round2(sectionScore(QUESTIONNAIRE.sections[0])),
+    section_B: round2(sectionScore(QUESTIONNAIRE.sections[1])),
+    section_C: round2(sectionScore(QUESTIONNAIRE.sections[2])),
+    question_codes: codes,        // one spreadsheet column per question
+    scores: scores,               // code -> numeric score
+    notes: notes,                 // code -> evidence/notes
     _subject: `CBT Index — ${state.meta.bank} (${state.meta.name})`,
     summary: summary,
     responses_json: JSON.stringify(state),

@@ -13,15 +13,31 @@
  *        const SUBMIT_ENDPOINT = "<that /exec URL>";
  *        const SUBMIT_MODE = "no-cors";
  *
- * Each submission is appended as one row; the full JSON is stored in the last
- * column so nothing is lost.
+ * UPGRADING: this version spreads each submission across many columns — one
+ * numeric column per question score, then one column per question's notes —
+ * so the data is easy to sort, average, and chart. It writes to a dedicated
+ * tab named RESPONSES (created automatically) and writes the header row once,
+ * the first time that tab is empty. If you previously collected data with the
+ * old single-cell layout, that old tab is left untouched; new submissions go
+ * to the RESPONSES tab. To start clean, just delete the RESPONSES tab and it
+ * will be recreated with a fresh header on the next submission.
  */
+
+var SHEET_NAME = "Responses";
+
+// Fixed leading columns (in order).
+var META_HEADER = [
+  "Received", "Name", "Institution", "Job title", "Work email",
+  "Central bank assessed", "Assessment date", "Regime", "Section B scale",
+  "Total score", "Total max", "Section A", "Section B", "Section C"
+];
 
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheets()[0];
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var sheet = ss.getSheetByName(SHEET_NAME) || ss.insertSheet(SHEET_NAME);
 
     var data;
     try {
@@ -30,20 +46,22 @@ function doPost(e) {
       data = e.parameter || {};
     }
 
-    // Write a header row once.
-    // NOTE: if you are upgrading an existing sheet that already has a header row,
-    // insert a "Regime" column after "Assessment date" (or clear row 1 so this
-    // header is rewritten) to keep columns aligned with the data below.
+    var codes = data.question_codes || [];
+    var scores = data.scores || {};
+    var notes = data.notes || {};
+
+    // Build / write the header row once, when the tab is empty.
     if (sheet.getLastRow() === 0) {
-      sheet.appendRow([
-        "Received", "Name", "Institution", "Job title", "Work email",
-        "Central bank assessed", "Assessment date", "Regime", "Section B scale",
-        "Total score", "Total max", "Section A", "Section B", "Section C",
-        "Summary", "Full JSON"
-      ]);
+      var header = META_HEADER.slice();
+      for (var i = 0; i < codes.length; i++) header.push(codes[i]);                 // score columns
+      for (var j = 0; j < codes.length; j++) header.push(codes[j] + " — notes");    // notes columns
+      header.push("Summary", "Full JSON");
+      sheet.appendRow(header);
+      sheet.setFrozenRows(1);
     }
 
-    sheet.appendRow([
+    // Build the data row in the same order as the header.
+    var row = [
       new Date(),
       data.name || "",
       data.institution || "",
@@ -53,14 +71,23 @@ function doPost(e) {
       data.assessment_date || "",
       data.regime || "",
       data.framework || "",
-      data.total_score || "",
-      data.total_max || "",
-      data.section_A || "",
-      data.section_B || "",
-      data.section_C || "",
-      data.summary || "",
-      data.responses_json || ""
-    ]);
+      data.total_score !== undefined ? data.total_score : "",
+      data.total_max !== undefined ? data.total_max : "",
+      data.section_A !== undefined ? data.section_A : "",
+      data.section_B !== undefined ? data.section_B : "",
+      data.section_C !== undefined ? data.section_C : ""
+    ];
+    for (var k = 0; k < codes.length; k++) {
+      var sc = scores[codes[k]];
+      row.push(sc === undefined || sc === null ? "" : sc);   // numeric score (blank if unanswered)
+    }
+    for (var m = 0; m < codes.length; m++) {
+      var nt = notes[codes[m]];
+      row.push(nt === undefined || nt === null ? "" : nt);
+    }
+    row.push(data.summary || "", data.responses_json || "");
+
+    sheet.appendRow(row);
 
     return ContentService
       .createTextOutput(JSON.stringify({ result: "ok" }))
