@@ -293,6 +293,7 @@ select.rate-select:focus { outline: 2px solid var(--blue); outline-offset: 1px; 
 .results { padding: 0 20px; margin: 8px auto 40px; }
 .results.hidden { display: none; }
 .results-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.results-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .results-head h2 { margin: 0; font-size: 1.4rem; color: var(--navy); }
 .results-sub { margin: 2px 0 0; color: var(--muted); font-size: .9rem; }
 .results-subhead { margin: 26px 0 4px; font-size: 1.05rem; color: var(--navy); }

@@ -668,7 +668,10 @@ function buildResultsHTML() {
         <h2>Results & charts</h2>
         <p class="results-sub">${subline || "Live snapshot of the current assessment"}</p>
       </div>
-      <button type="button" class="btn" id="btn-results-close">Close</button>
+      <div class="results-actions">
+        <button type="button" class="btn btn-primary" id="btn-results-pdf">Download PDF</button>
+        <button type="button" class="btn" id="btn-results-close">Close</button>
+      </div>
     </div>
 
     <div class="results-grid">
@@ -700,6 +703,8 @@ function showResults() {
   panel.classList.remove("hidden");
   const closeBtn = document.getElementById("btn-results-close");
   if (closeBtn) closeBtn.addEventListener("click", () => panel.classList.add("hidden"));
+  const pdfBtn = document.getElementById("btn-results-pdf");
+  if (pdfBtn) pdfBtn.addEventListener("click", printReport);
   panel.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
