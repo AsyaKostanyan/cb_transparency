@@ -847,6 +847,13 @@ function ensureHtml2pdf() {
   if (!_html2pdfPromise) _html2pdfPromise = loadScript(HTML2PDF_SRC);
   return _html2pdfPromise;
 }
+/* Reject if a promise takes longer than ms (so the PDF step can't hang submit). */
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), ms))
+  ]);
+}
 
 /* Render the report off-screen and return it as a base64 PDF (no data: prefix). */
 async function generateReportPdfBase64() {
@@ -987,18 +994,20 @@ async function submitResponse() {
 
   const payload = buildPayload();
 
-  // Attach the PDF report so the backend can email it. Non-fatal on failure.
+  // Attach the PDF report so the backend can email it. Non-fatal: never let PDF
+  // generation block or hang the submission (cap it with a timeout).
   try {
     btn.textContent = "Preparing PDF…";
-    const pdf = await generateReportPdfBase64();
+    const pdf = await withTimeout(generateReportPdfBase64(), 25000);
     payload.pdf_base64 = pdf.base64;
     payload.pdf_filename = pdf.filename;
   } catch (e) {
-    /* proceed without the PDF if generation fails */
+    console.warn("PDF generation skipped:", e);
   }
 
   btn.textContent = "Submitting…";
 
+  let sent = false;
   try {
     if (SUBMIT_MODE === "no-cors") {
       // Google Apps Script web app: fire-and-forget (response is opaque).
@@ -1008,31 +1017,26 @@ async function submitResponse() {
         headers: { "Content-Type": "text/plain;charset=utf-8" },
         body: JSON.stringify(payload)
       });
-      toast("Response submitted. Thank you!");
-      showResults();
+      sent = true;
     } else {
       const res = await fetch(SUBMIT_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify(payload)
       });
-      if (res.ok) {
-        toast("Response submitted. Thank you!");
-        showResults();
-      } else {
-        throw new Error("HTTP " + res.status);
-      }
+      sent = res.ok;
+      if (!res.ok) throw new Error("HTTP " + res.status);
     }
   } catch (e) {
-    alert(
-      "Submission failed (" + e.message + ").\n\n" +
-      "Please check your connection and try again, or use Save to download your " +
-      "response and send it manually."
-    );
+    console.error("Submission error:", e);
   } finally {
     btn.disabled = false;
     btn.textContent = original;
   }
+
+  // Always show the charts after a submit attempt.
+  showResults();
+  toast(sent ? "Response submitted. Thank you!" : "Could not reach the server — your charts are shown; try Submit again.");
 }
 
 function resetAll() {

@@ -28,6 +28,21 @@ var EMAIL_TO = "asya.kostanyan.94@gmail.com";
 // Optional: also send a copy to the respondent's own address.
 var CC_RESPONDENT = false;
 
+// Visiting the /exec URL in a browser hits this — handy to confirm the web app
+// is deployed and public. You should see the "...is live" message.
+function doGet(e) {
+  return ContentService
+    .createTextOutput("CBT Index email backend is live. POST submissions to this URL.")
+    .setMimeType(ContentService.MimeType.TEXT);
+}
+
+// Run this once from the Apps Script editor (Run ▸ sendTestEmail) to verify the
+// email permission and that mail reaches EMAIL_TO.
+function sendTestEmail() {
+  MailApp.sendEmail(EMAIL_TO, "CBT Index — test email",
+    "If you received this, the email backend is authorized and working.");
+}
+
 function doPost(e) {
   try {
     var data;
