@@ -52,12 +52,14 @@ included with the saved/submitted response.
   score, chosen rating, and evidence/notes). Click **PDF report**, then choose
   *Save as PDF* in the print dialog
 
-## Emailing submissions (Submit response)
+## Saving submissions (Submit response)
 
 When a respondent clicks **Submit response**, the browser builds the PDF report
-and posts it to a small Google Apps Script, which **emails it to you** — names,
-framework/regime, and scores in the body, with the PDF attached. No spreadsheet,
-no third-party service.
+and posts it to a small Google Apps Script, which **saves the PDF to a Google
+Drive folder** (`CBT Index Submissions`, created automatically) and also tries to
+**email a copy** to you. The PDF is the same report the app shows — names,
+framework/regime, scores, and the full per-question detail. No spreadsheet, no
+third-party service.
 
 The endpoint is configured at the top of [`app.js`](app.js):
 
@@ -70,23 +72,26 @@ Set it up once:
 
 1. Go to <https://script.google.com> → **New project** (it does **not** need a
    sheet). Paste the code from [`google-apps-script.gs`](google-apps-script.gs).
-2. Set `EMAIL_TO` (top of the script) to the address that should receive
-   submissions. Optionally set `CC_RESPONDENT = true` to copy the respondent.
-3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access:
-   Anyone*. Copy the `/exec` URL into `SUBMIT_ENDPOINT`.
-4. On the first deploy, approve the **send email as you** permission
-   (*Advanced → Go to project → Allow*).
+2. Set `EMAIL_TO` (top of the script). Set `SEND_EMAIL = false` to skip email and
+   save to Drive only; `CC_RESPONDENT = true` to copy the respondent.
+3. In the editor, **Run ▸ `authorize`** once and approve the **Drive** (and Gmail,
+   if emailing) permissions (*Advanced → Go to project → Allow*). This also drops
+   a marker file in the Drive folder and a test email so you can confirm both.
+4. **Deploy → New deployment → Web app**, *Execute as: Me*, **Who has access:
+   Anyone** (must be *Anyone*, no login). Copy the `/exec` URL into
+   `SUBMIT_ENDPOINT`.
 
 > If you edit the script later, redeploy so the live URL runs the new code —
 > **Deploy → Manage deployments → (pencil) → Version: New version → Deploy**.
-> The `/exec` URL stays the same.
+> The `/exec` URL stays the same. Open the `/exec` URL in a browser to confirm it
+> is public — you should see *"CBT Index backend is live."*, not a sign-in page.
 
-The PDF is generated in the browser (via `html2pdf`), so the emailed report looks
+The PDF is generated in the browser (via `html2pdf`), so the saved report looks
 like the on-screen **PDF report**. If the PDF can't be generated (e.g. offline),
-the email is still sent with all the names, framework, and scores — just without
-the attachment. Because Apps Script replies opaquely, the page can't confirm
-delivery, so do one test submission after setup. **Save** and **Export CSV**
-still work locally regardless.
+a text file with the summary is saved instead, so a submission is never lost.
+Files land in the **CBT Index Submissions** folder in your Drive, named
+`CBT Index - <bank> - <name> - <date>.pdf`. **Save** and **Export CSV** still
+work locally regardless.
 
 ## Files
 
