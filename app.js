@@ -19,7 +19,7 @@ const STORAGE_KEY = "fpas-cbt-index-v2";
    Leave SUBMIT_ENDPOINT empty ("") to keep the site local-only; the Submit
    button will then explain that collection is not configured.
    ============================================================================= */
-const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbzjA0253j8CSUSbu06v113yiSfUA21JQqXiPjsrTBT568-ZBE_OA6-PiBab6HxzFih5/exec";
+const SUBMIT_ENDPOINT = "https://script.google.com/macros/s/AKfycbzRfczH0uS7h1OzL68es3Z1evf96bxI7HpSDN9Uj7bRyUcsF8XzwGah8VmCl7Sqld0/exec";
 const SUBMIT_MODE = "no-cors";           // "no-cors" for the Apps Script email backend
 
 const EMPTY_META = { name: "", institution: "", job: "", email: "", bank: "", date: "" };
