@@ -342,6 +342,11 @@ select.rate-select:focus { outline: 2px solid var(--blue); outline-offset: 1px; 
 /* ---------- Printable PDF report ---------- */
 .report { display: none; }
 .report { color: var(--ink); font-size: 11pt; line-height: 1.5; }
+/* When generating the emailed PDF, render the report off-screen at page width. */
+.report.rendering {
+  display: block; position: absolute; left: -10000px; top: 0;
+  width: 794px; background: #fff; padding: 28px;
+}
 
 .rep-cover { border-bottom: 3px solid var(--navy); padding-bottom: 14px; margin-bottom: 18px; }
 .rep-eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 8.5pt; color: var(--blue); font-weight: 700; margin: 0 0 6px; }

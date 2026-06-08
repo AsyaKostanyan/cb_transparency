@@ -83,14 +83,24 @@ Export CSV still work). Pick **one** of the two options below.
    (Apps Script web apps don't send CORS headers, so the page submits
    fire-and-forget; rows still land in your sheet.)
 
-Each submission is written as **one row spread across many columns** — the
-respondent/meta fields, the regime, section and total scores, then **one numeric
-column per question** (`A1 … C6`) followed by **one notes column per question**
-(`A1 — notes …`), and finally the readable `Summary` and full `responses_json`.
-This makes the data easy to sort, average, and chart directly in the sheet.
+On each submission this backend does two things:
 
-Rows are written to a dedicated tab named **Responses** (created automatically).
-The header is written once, the first time that tab is empty.
+1. **Emails the PDF report** to `EMAIL_TO` (set at the top of the script) as an
+   attachment — the browser builds the PDF and the script mails it from the
+   account that owns the script. Set `EMAIL_TO` to your address. (Set
+   `CC_RESPONDENT = true` to also copy the person who submitted.)
+2. **Logs the response** to a sheet as **one row spread across many columns** —
+   the respondent/meta fields, the regime, section and total scores, then **one
+   numeric column per question** (`A1 … C6`), **one notes column per question**
+   (`A1 — notes …`), and finally the readable `Summary` and full `responses_json`.
+
+Rows are written to a dedicated tab named **Responses** (created automatically);
+the header is written once, the first time that tab is empty.
+
+> **Authorize email once:** the first time you redeploy after adding the email
+> feature, Apps Script prompts you to allow the *send email as you* permission —
+> approve it. The PDF itself is generated in the browser (via `html2pdf`), so the
+> emailed report looks like the on-screen **PDF report**.
 
 **Upgrading an existing backend:** after pasting the new code, redeploy so the
 live URL runs it — **Deploy → Manage deployments → (edit, pencil) → Version: New

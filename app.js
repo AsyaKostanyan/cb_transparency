@@ -587,17 +587,20 @@ function levelOf(score, max) {
   return "partial";
 }
 
-/* Donut gauge (inline SVG). pct 0–100. */
+/* Donut gauge (inline SVG). pct 0–100.
+   Colours/rotation are baked in as presentation attributes (not CSS) so the
+   gauge also renders correctly when rasterized into the emailed PDF. */
 function donutSVG(pct, centerTop, centerSub) {
   const r = 54, c = 2 * Math.PI * r;
   const off = c * (1 - Math.max(0, Math.min(100, pct)) / 100);
   return `
     <svg viewBox="0 0 140 140" class="donut" role="img" aria-label="${centerTop} ${centerSub}">
-      <circle cx="70" cy="70" r="${r}" class="donut-track"></circle>
-      <circle cx="70" cy="70" r="${r}" class="donut-val"
-        style="stroke-dasharray:${c.toFixed(1)};stroke-dashoffset:${off.toFixed(1)};"></circle>
-      <text x="70" y="68" class="donut-pct">${centerTop}</text>
-      <text x="70" y="88" class="donut-sub">${centerSub}</text>
+      <circle cx="70" cy="70" r="${r}" fill="none" stroke="#e1e7ee" stroke-width="12"></circle>
+      <circle cx="70" cy="70" r="${r}" fill="none" stroke="#1f6feb" stroke-width="12"
+        stroke-linecap="round" transform="rotate(-90 70 70)"
+        stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"></circle>
+      <text x="70" y="68" text-anchor="middle" font-size="26" font-weight="800" fill="#0f2a43">${centerTop}</text>
+      <text x="70" y="88" text-anchor="middle" font-size="13" font-weight="600" fill="#5b6b7b">${centerSub}</text>
     </svg>`;
 }
 
@@ -827,6 +830,50 @@ function printReport() {
   window.print();
 }
 
+/* Lazy-load the html2pdf library (only when we actually need to email a PDF). */
+const HTML2PDF_SRC = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js";
+let _html2pdfPromise = null;
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = () => reject(new Error("Failed to load " + src));
+    document.head.appendChild(s);
+  });
+}
+function ensureHtml2pdf() {
+  if (window.html2pdf) return Promise.resolve();
+  if (!_html2pdfPromise) _html2pdfPromise = loadScript(HTML2PDF_SRC);
+  return _html2pdfPromise;
+}
+
+/* Render the report off-screen and return it as a base64 PDF (no data: prefix). */
+async function generateReportPdfBase64() {
+  await ensureHtml2pdf();
+  const rep = document.getElementById("report");
+  if (!rep || !window.html2pdf) throw new Error("PDF generator unavailable");
+  rep.innerHTML = buildReportHTML();
+  rep.classList.add("rendering");
+  const bank = (state.meta.bank || "central-bank").replace(/[^\w-]+/g, "-").toLowerCase();
+  const filename = `cbt-index-${bank}.pdf`;
+  const opt = {
+    margin: [10, 10, 12, 10],
+    filename: filename,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+    pagebreak: { mode: ["css", "legacy"] }
+  };
+  try {
+    const dataUri = await window.html2pdf().set(opt).from(rep).outputPdf("datauristring");
+    return { base64: dataUri.split(",")[1], filename: filename };
+  } finally {
+    rep.classList.remove("rendering");
+    rep.innerHTML = "";
+  }
+}
+
 /* ---- Submit (central collection) --------------------------------------- */
 const REQUIRED_META = [
   { f: "name", label: "Your name" },
@@ -947,9 +994,20 @@ async function submitResponse() {
   const btn = document.getElementById("btn-submit");
   const original = btn.textContent;
   btn.disabled = true;
-  btn.textContent = "Submitting…";
 
   const payload = buildPayload();
+
+  // Attach the PDF report so the backend can email it. Non-fatal on failure.
+  try {
+    btn.textContent = "Preparing PDF…";
+    const pdf = await generateReportPdfBase64();
+    payload.pdf_base64 = pdf.base64;
+    payload.pdf_filename = pdf.filename;
+  } catch (e) {
+    /* proceed without the PDF if generation fails */
+  }
+
+  btn.textContent = "Submitting…";
 
   try {
     if (SUBMIT_MODE === "no-cors") {

@@ -13,15 +13,28 @@
  *        const SUBMIT_ENDPOINT = "<that /exec URL>";
  *        const SUBMIT_MODE = "no-cors";
  *
- * UPGRADING: this version spreads each submission across many columns — one
- * numeric column per question score, then one column per question's notes —
- * so the data is easy to sort, average, and chart. It writes to a dedicated
- * tab named RESPONSES (created automatically) and writes the header row once,
- * the first time that tab is empty. If you previously collected data with the
- * old single-cell layout, that old tab is left untouched; new submissions go
- * to the RESPONSES tab. To start clean, just delete the RESPONSES tab and it
- * will be recreated with a fresh header on the next submission.
+ * EMAIL: each submission also emails the generated PDF report to EMAIL_TO
+ * (below) as an attachment, sent from the account that owns this script. The
+ * first time you redeploy after adding this, Apps Script will ask you to
+ * authorize the Gmail/"send email" permission — approve it once.
+ *
+ * COLUMNS: each submission is also logged across many columns — one numeric
+ * column per question score, then one column per question's notes — so the data
+ * is easy to sort, average, and chart. Rows go to a dedicated tab named
+ * RESPONSES (created automatically); the header is written once, the first time
+ * that tab is empty. Old single-cell data on your original tab is left
+ * untouched. To start clean, delete the RESPONSES tab and it is recreated.
+ *
+ * AFTER EDITING: redeploy so the live URL runs the new code —
+ *   Deploy → Manage deployments → (pencil) → Version: New version → Deploy.
+ * The /exec URL stays the same.
  */
+
+// Where completed assessments are emailed (the PDF report is attached).
+// Mail is sent from the Google account that owns/deploys this script.
+var EMAIL_TO = "asya.kostanyan.94@gmail.com";
+// Optional: also email a copy to the respondent's own address. Set to true to enable.
+var CC_RESPONDENT = false;
 
 var SHEET_NAME = "Responses";
 
@@ -88,6 +101,25 @@ function doPost(e) {
     row.push(data.summary || "", data.responses_json || "");
 
     sheet.appendRow(row);
+
+    // Email the PDF report (if the client attached one). Non-fatal on failure.
+    if (data.pdf_base64) {
+      try {
+        var bytes = Utilities.base64Decode(data.pdf_base64);
+        var pdf = Utilities.newBlob(bytes, "application/pdf", data.pdf_filename || "cbt-report.pdf");
+        var subject = "CBT Index — " + (data.central_bank_assessed || "(central bank)") +
+          (data.regime ? " — " + data.regime : "");
+        var body =
+          "A new Central Bank Transparency Index assessment has been submitted.\n\n" +
+          (data.summary || "") +
+          "\n\nThe full report is attached as a PDF.";
+        var options = { attachments: [pdf], name: "CBT Index" };
+        if (CC_RESPONDENT && data.work_email) options.cc = data.work_email;
+        MailApp.sendEmail(EMAIL_TO, subject, body, options);
+      } catch (mailErr) {
+        // keep the sheet row even if emailing fails
+      }
+    }
 
     return ContentService
       .createTextOutput(JSON.stringify({ result: "ok" }))
