@@ -830,9 +830,7 @@ function printReport() {
   window.print();
 }
 
-/* Lazy-load the html2pdf library (only when we actually need to email a PDF). */
-const HTML2PDF_SRC = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.3/html2pdf.bundle.min.js";
-let _html2pdfPromise = null;
+/* Lazy-load a script by URL. */
 function loadScript(src) {
   return new Promise((resolve, reject) => {
     const s = document.createElement("script");
@@ -842,11 +840,6 @@ function loadScript(src) {
     document.head.appendChild(s);
   });
 }
-function ensureHtml2pdf() {
-  if (window.html2pdf) return Promise.resolve();
-  if (!_html2pdfPromise) _html2pdfPromise = loadScript(HTML2PDF_SRC);
-  return _html2pdfPromise;
-}
 /* Reject if a promise takes longer than ms (so the PDF step can't hang submit). */
 function withTimeout(promise, ms) {
   return Promise.race([
@@ -855,39 +848,154 @@ function withTimeout(promise, ms) {
   ]);
 }
 
-/* Render the report off-screen and return it as a base64 PDF (no data: prefix). */
+/* Lazy-load jsPDF (used to build the emailed/Drive PDF programmatically — no DOM
+   screenshotting, so it can never come out blank). */
+const JSPDF_SRC = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+let _jspdfPromise = null;
+function ensureJsPDF() {
+  if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
+  if (!_jspdfPromise) _jspdfPromise = loadScript(JSPDF_SRC);
+  return _jspdfPromise;
+}
+
+/* Build the report as a real PDF with jsPDF and return it as base64 (no prefix). */
 async function generateReportPdfBase64() {
-  await ensureHtml2pdf();
-  const rep = document.getElementById("report");
-  if (!rep || !window.html2pdf) throw new Error("PDF generator unavailable");
-  rep.innerHTML = buildReportHTML();
-  rep.classList.add("rendering");
-  // Let the browser lay out (and load fonts) before capturing.
-  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-  const bank = (state.meta.bank || "central-bank").replace(/[^\w-]+/g, "-").toLowerCase();
-  const filename = `cbt-index-${bank}.pdf`;
-  const opt = {
-    margin: [10, 10, 12, 10],
-    filename: filename,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      backgroundColor: "#ffffff",
-      useCORS: true,
-      scrollX: 0,
-      scrollY: 0,
-      windowWidth: rep.scrollWidth || 794
-    },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-    pagebreak: { mode: ["css", "legacy"] }
+  await ensureJsPDF();
+  if (!window.jspdf || !window.jspdf.jsPDF) throw new Error("PDF library unavailable");
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "pt", format: "a4" });
+
+  const pageW = doc.internal.pageSize.getWidth();
+  const pageH = doc.internal.pageSize.getHeight();
+  const M = 42;
+  const contentW = pageW - M * 2;
+  let y = M;
+
+  const C = {
+    navy: [15, 42, 67], blue: [31, 111, 235], muted: [91, 107, 123], ink: [27, 39, 51],
+    line: [225, 231, 238], good: [31, 157, 87], partial: [201, 135, 10], bad: [192, 57, 43]
   };
-  try {
-    const dataUri = await window.html2pdf().set(opt).from(rep).outputPdf("datauristring");
-    return { base64: dataUri.split(",")[1], filename: filename };
-  } finally {
-    rep.classList.remove("rendering");
-    rep.innerHTML = "";
+  const setText = (c) => doc.setTextColor(c[0], c[1], c[2]);
+  const setFill = (c) => doc.setFillColor(c[0], c[1], c[2]);
+  const ensure = (h) => { if (y + h > pageH - M) { doc.addPage(); y = M; } };
+  const lvlColor = (lvl) =>
+    lvl === "full" ? C.good : lvl === "partial" ? C.partial : lvl === "zero" ? C.bad : C.muted;
+  const levelOfScore = (s, mx) => (s <= 0 ? "zero" : s >= mx ? "full" : "partial");
+
+  const sections = QUESTIONNAIRE.sections;
+  let total = 0, totalMax = 0;
+  sections.forEach((s) => { total += sectionScore(s); totalMax += sectionMax(s); });
+  const totalPct = totalMax ? Math.round((total / totalMax) * 100) : 0;
+  const ri = state.regime ? REGIME_DETECTION.regimes[state.regime] : null;
+  const regimeLabel = ri ? ri.label : "Not detected";
+  const m = state.meta;
+
+  // Header
+  setText(C.blue); doc.setFont("helvetica", "bold"); doc.setFontSize(9);
+  doc.text("FPAS MARK II  ·  THE BETTER POLICY PROJECT", M, y); y += 18;
+  setText(C.navy); doc.setFontSize(17);
+  doc.text("Central Bank Transparency Index", M, y); y += 22;
+  setText(C.ink); doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+  doc.text(m.bank || "(central bank)", M, y); y += 18;
+
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10); setText(C.muted);
+  [
+    "Respondent: " + (m.name || "—") + (m.job ? ", " + m.job : ""),
+    "Institution: " + (m.institution || "—"),
+    "Email: " + (m.email || "—") + "     Date: " + (m.date || "—"),
+    "Detected regime: " + regimeLabel
+  ].forEach((line) => { doc.text(line, M, y); y += 14; });
+  y += 4;
+  setFill(C.line); doc.rect(M, y, contentW, 1, "F"); y += 20;
+
+  // Total + section bars
+  setText(C.navy); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text("Total transparency score:  " + fmt(total) + " / " + fmt(totalMax) + "   (" + totalPct + "%)", M, y);
+  y += 20;
+
+  doc.setFontSize(10);
+  sections.forEach((sec) => {
+    const s = sectionScore(sec), mx = sectionMax(sec);
+    const pct = mx ? s / mx : 0;
+    ensure(30);
+    setText(C.ink); doc.setFont("helvetica", "normal");
+    doc.text("Section " + sec.id + " — " + sec.title, M, y);
+    doc.text(fmt(s) + " / " + fmt(mx), pageW - M, y, { align: "right" });
+    y += 7;
+    const barH = 8;
+    setFill(C.line); doc.roundedRect(M, y, contentW, barH, 2, 2, "F");
+    setFill(lvlColor(levelOfScore(s, mx)));
+    doc.roundedRect(M, y, Math.max(2, contentW * pct), barH, 2, 2, "F");
+    y += barH + 13;
+  });
+
+  if (ri) {
+    doc.setFont("helvetica", "italic"); doc.setFontSize(8.5); setText(C.muted);
+    const dl = doc.splitTextToSize(ri.desc, contentW);
+    ensure(dl.length * 11 + 6);
+    doc.text(dl, M, y); y += dl.length * 11 + 10;
   }
+
+  // Detailed responses
+  ensure(28);
+  setText(C.navy); doc.setFont("helvetica", "bold"); doc.setFontSize(13);
+  doc.text("Detailed responses", M, y); y += 8;
+  setFill(C.line); doc.rect(M, y, contentW, 1.2, "F"); y += 18;
+
+  sections.forEach((sec) => {
+    ensure(28);
+    setText(C.navy); doc.setFont("helvetica", "bold"); doc.setFontSize(11.5);
+    doc.text("Section " + sec.id + " · " + sec.title, M, y);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10); setText(C.muted);
+    doc.text(fmt(sectionScore(sec)) + " / " + fmt(sectionMax(sec)), pageW - M, y, { align: "right" });
+    y += 8; setFill(C.line); doc.rect(M, y, contentW, 0.8, "F"); y += 15;
+
+    sec.questions.forEach((q) => {
+      const ans = state.answers[q.code] || {};
+      const opts = activeOptions(q);
+      const az = isAutoZeroed(q);
+      const chosen = (!az && ans.sel != null) ? opts[ans.sel] : null;
+      const answered = az || ans.sel != null;
+      const score = answered ? questionScore(q) : null;
+      const max = opts.length ? optionsMax(opts) : questionMax(q);
+      const lvl = answered ? levelOfScore(score, max) : "na";
+      const scoreText = answered ? fmt(score) + " / " + fmt(max) : "— / " + fmt(max);
+      const rating = az
+        ? "Automatically 0 — " + regimeLabel + " regime"
+        : (chosen ? chosen.label : "Not answered");
+
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      const qLines = doc.splitTextToSize(q.text, contentW - 60);
+      const rLines = doc.splitTextToSize("Rating: " + rating, contentW);
+      const noteText = (ans.notes || "").trim();
+      const nLines = noteText ? doc.splitTextToSize("Notes: " + noteText, contentW) : [];
+      const blockH = 14 + qLines.length * 11 + rLines.length * 11 + (nLines.length ? nLines.length * 10 + 4 : 0) + 8;
+      ensure(blockH);
+
+      setText(C.blue); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+      doc.text(q.code, M, y);
+      setText(lvlColor(lvl)); doc.text(scoreText, pageW - M, y, { align: "right" });
+      y += 13;
+
+      setText(C.ink); doc.setFont("helvetica", "normal"); doc.setFontSize(9.5);
+      doc.text(qLines, M, y); y += qLines.length * 11 + 2;
+
+      setText(C.ink); doc.setFont("helvetica", "bold"); doc.setFontSize(9.5);
+      doc.text(rLines, M, y); y += rLines.length * 11;
+
+      if (nLines.length) {
+        setText(C.muted); doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+        doc.text(nLines, M, y); y += nLines.length * 10 + 2;
+      }
+      y += 7;
+    });
+    y += 6;
+  });
+
+  const filename = "cbt-index-" +
+    (m.bank || "central-bank").replace(/[^\w-]+/g, "-").toLowerCase() + ".pdf";
+  const dataUri = doc.output("datauristring");
+  return { base64: dataUri.split(",")[1], filename: filename };
 }
 
 /* ---- Submit (central collection) --------------------------------------- */
