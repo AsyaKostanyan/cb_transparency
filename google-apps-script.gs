@@ -102,23 +102,40 @@ function doPost(e) {
 
     sheet.appendRow(row);
 
-    // Email the PDF report (if the client attached one). Non-fatal on failure.
-    if (data.pdf_base64) {
-      try {
+    // Email the submission (names + framework + PDF). Non-fatal on failure.
+    try {
+      var subject = "CBT Index — " + (data.central_bank_assessed || "(central bank)") +
+        (data.regime ? " (" + data.regime + ")" : "") +
+        (data.name ? " — " + data.name : "");
+      var body =
+        "New Central Bank Transparency Index submission\n" +
+        "----------------------------------------------\n" +
+        "Central bank assessed: " + (data.central_bank_assessed || "") + "\n" +
+        "Framework / regime:    " + (data.regime || "") +
+          (data.framework ? " (" + data.framework + " scale)" : "") + "\n" +
+        "Respondent:            " + (data.name || "") +
+          (data.job_title ? ", " + data.job_title : "") + "\n" +
+        "Institution:           " + (data.institution || "") + "\n" +
+        "Work email:            " + (data.work_email || "") + "\n" +
+        "Assessment date:       " + (data.assessment_date || "") + "\n" +
+        "Total score:           " + (data.total_score !== undefined ? data.total_score : "") +
+          " / " + (data.total_max !== undefined ? data.total_max : "") + "\n" +
+        "Section A / B / C:     " + (data.section_A) + " / " + (data.section_B) +
+          " / " + (data.section_C) + "\n\n" +
+        (data.pdf_base64 ? "The full PDF report is attached.\n\n" : "(PDF was not generated for this submission.)\n\n") +
+        "----- Full summary -----\n" + (data.summary || "");
+
+      var options = { name: "CBT Index" };
+      if (data.pdf_base64) {
         var bytes = Utilities.base64Decode(data.pdf_base64);
-        var pdf = Utilities.newBlob(bytes, "application/pdf", data.pdf_filename || "cbt-report.pdf");
-        var subject = "CBT Index — " + (data.central_bank_assessed || "(central bank)") +
-          (data.regime ? " — " + data.regime : "");
-        var body =
-          "A new Central Bank Transparency Index assessment has been submitted.\n\n" +
-          (data.summary || "") +
-          "\n\nThe full report is attached as a PDF.";
-        var options = { attachments: [pdf], name: "CBT Index" };
-        if (CC_RESPONDENT && data.work_email) options.cc = data.work_email;
-        MailApp.sendEmail(EMAIL_TO, subject, body, options);
-      } catch (mailErr) {
-        // keep the sheet row even if emailing fails
+        options.attachments = [
+          Utilities.newBlob(bytes, "application/pdf", data.pdf_filename || "cbt-report.pdf")
+        ];
       }
+      if (CC_RESPONDENT && data.work_email) options.cc = data.work_email;
+      MailApp.sendEmail(EMAIL_TO, subject, body, options);
+    } catch (mailErr) {
+      // keep the sheet row even if emailing fails
     }
 
     return ContentService
