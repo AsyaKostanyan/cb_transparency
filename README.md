@@ -43,7 +43,8 @@ included with the saved/submitted response.
 - Live per-question, per-section, and total scores
 - **Charts** — a results panel (total gauge, section bars, per-question breakdown)
   rendered when you Save, or any time via the **Charts** button
-- **Submit response** — sends the completed assessment to a central inbox/spreadsheet
+- **Submit response** — emails the completed assessment (respondent name,
+  framework/regime, scores, and the PDF report attached) straight to your inbox
 - **Save / Load** an assessment as a JSON file (also auto-saved in your browser)
 - **Export CSV** for analysis or archiving
 - **PDF report** — a polished, self-contained document (cover page with bank /
@@ -51,62 +52,41 @@ included with the saved/submitted response.
   score, chosen rating, and evidence/notes). Click **PDF report**, then choose
   *Save as PDF* in the print dialog
 
-## Collecting responses centrally
+## Emailing submissions (Submit response)
 
-The **Submit response** button POSTs each completed assessment to an endpoint you
-configure at the top of [`app.js`](app.js):
+When a respondent clicks **Submit response**, the browser builds the PDF report
+and posts it to a small Google Apps Script, which **emails it to you** — names,
+framework/regime, and scores in the body, with the PDF attached. No spreadsheet,
+no third-party service.
+
+The endpoint is configured at the top of [`app.js`](app.js):
 
 ```js
-const SUBMIT_ENDPOINT = "";     // paste your endpoint URL here
-const SUBMIT_MODE = "cors";     // "cors" for Formspree, "no-cors" for Apps Script
+const SUBMIT_ENDPOINT = "";          // paste your Apps Script /exec URL here
+const SUBMIT_MODE = "no-cors";       // Apps Script: keep this "no-cors"
 ```
 
-Until an endpoint is set, Submit explains that collection isn't configured (Save /
-Export CSV still work). Pick **one** of the two options below.
+Set it up once:
 
-### Option A — Formspree (easiest, recommended)
-
-1. Sign up free at <https://formspree.io>, create a form, and copy its endpoint
-   (looks like `https://formspree.io/f/abcdwxyz`).
-2. Set `SUBMIT_ENDPOINT` to that URL and keep `SUBMIT_MODE = "cors"`.
-3. Responses arrive in your Formspree inbox (and can forward to email / Google
-   Sheets / Slack). Each submission includes the respondent fields, section and
-   total scores, a readable `summary`, and the full `responses_json`.
-
-### Option B — Google Sheets (via Apps Script)
-
-1. Create a Google Sheet → **Extensions → Apps Script**.
-2. Paste the code from [`google-apps-script.gs`](google-apps-script.gs).
+1. Go to <https://script.google.com> → **New project** (it does **not** need a
+   sheet). Paste the code from [`google-apps-script.gs`](google-apps-script.gs).
+2. Set `EMAIL_TO` (top of the script) to the address that should receive
+   submissions. Optionally set `CC_RESPONDENT = true` to copy the respondent.
 3. **Deploy → New deployment → Web app**, *Execute as: Me*, *Who has access:
-   Anyone*. Copy the `/exec` URL.
-4. Set `SUBMIT_ENDPOINT` to that URL and `SUBMIT_MODE = "no-cors"`.
-   (Apps Script web apps don't send CORS headers, so the page submits
-   fire-and-forget; rows still land in your sheet.)
+   Anyone*. Copy the `/exec` URL into `SUBMIT_ENDPOINT`.
+4. On the first deploy, approve the **send email as you** permission
+   (*Advanced → Go to project → Allow*).
 
-On each submission this backend does two things:
+> If you edit the script later, redeploy so the live URL runs the new code —
+> **Deploy → Manage deployments → (pencil) → Version: New version → Deploy**.
+> The `/exec` URL stays the same.
 
-1. **Emails the PDF report** to `EMAIL_TO` (set at the top of the script) as an
-   attachment — the browser builds the PDF and the script mails it from the
-   account that owns the script. Set `EMAIL_TO` to your address. (Set
-   `CC_RESPONDENT = true` to also copy the person who submitted.)
-2. **Logs the response** to a sheet as **one row spread across many columns** —
-   the respondent/meta fields, the regime, section and total scores, then **one
-   numeric column per question** (`A1 … C6`), **one notes column per question**
-   (`A1 — notes …`), and finally the readable `Summary` and full `responses_json`.
-
-Rows are written to a dedicated tab named **Responses** (created automatically);
-the header is written once, the first time that tab is empty.
-
-> **Authorize email once:** the first time you redeploy after adding the email
-> feature, Apps Script prompts you to allow the *send email as you* permission —
-> approve it. The PDF itself is generated in the browser (via `html2pdf`), so the
-> emailed report looks like the on-screen **PDF report**.
-
-**Upgrading an existing backend:** after pasting the new code, redeploy so the
-live URL runs it — **Deploy → Manage deployments → (edit, pencil) → Version: New
-version → Deploy**. The `/exec` URL stays the same. Old single-cell data on your
-original tab is left untouched; new submissions go to the **Responses** tab. To
-start clean, delete the **Responses** tab and it is recreated on the next submit.
+The PDF is generated in the browser (via `html2pdf`), so the emailed report looks
+like the on-screen **PDF report**. If the PDF can't be generated (e.g. offline),
+the email is still sent with all the names, framework, and scores — just without
+the attachment. Because Apps Script replies opaquely, the page can't confirm
+delivery, so do one test submission after setup. **Save** and **Export CSV**
+still work locally regardless.
 
 ## Files
 
@@ -115,7 +95,7 @@ index.html             Page structure
 styles.css             Styling
 questionnaire-data.js  All questions, options, and scores
 app.js                 Rendering, scoring, save/load/export, submit
-google-apps-script.gs  Optional backend for collecting responses in Google Sheets
+google-apps-script.gs  Backend that emails each submission + PDF to you
 .nojekyll              Tells GitHub Pages to serve files as-is
 ```
 
@@ -138,4 +118,6 @@ Just open `index.html` in any modern browser — no build step or server require
    Set **Source** = *Deploy from a branch*, **Branch** = `main`, folder = `/ (root)`.
 3. The site will be live at `https://<you>.github.io/<repo>/` within a minute or two.
 
-Responses are stored only in the visitor's browser; nothing is sent to a server.
+While being filled in, a response is stored only in the visitor's browser. It is
+sent anywhere only when the visitor clicks **Submit response**, which emails the
+report to the address configured in the Apps Script backend.
