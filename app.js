@@ -862,13 +862,22 @@ async function generateReportPdfBase64() {
   if (!rep || !window.html2pdf) throw new Error("PDF generator unavailable");
   rep.innerHTML = buildReportHTML();
   rep.classList.add("rendering");
+  // Let the browser lay out (and load fonts) before capturing.
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
   const bank = (state.meta.bank || "central-bank").replace(/[^\w-]+/g, "-").toLowerCase();
   const filename = `cbt-index-${bank}.pdf`;
   const opt = {
     margin: [10, 10, 12, 10],
     filename: filename,
     image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, backgroundColor: "#ffffff", useCORS: true },
+    html2canvas: {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      scrollX: 0,
+      scrollY: 0,
+      windowWidth: rep.scrollWidth || 794
+    },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
     pagebreak: { mode: ["css", "legacy"] }
   };

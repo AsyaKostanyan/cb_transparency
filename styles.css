@@ -342,10 +342,15 @@ select.rate-select:focus { outline: 2px solid var(--blue); outline-offset: 1px; 
 /* ---------- Printable PDF report ---------- */
 .report { display: none; }
 .report { color: var(--ink); font-size: 11pt; line-height: 1.5; }
-/* When generating the emailed PDF, render the report off-screen at page width. */
+/* When generating the PDF, render the report on-screen at page width so
+   html2canvas captures it reliably. A large white box-shadow masks the rest of
+   the screen, so it just looks like a brief white flash during generation.
+   (Rendering far off-screen makes html2canvas capture a blank page.) */
 .report.rendering {
-  display: block; position: absolute; left: -10000px; top: 0;
+  display: block; position: fixed; left: 0; top: 0;
   width: 794px; background: #fff; padding: 28px;
+  z-index: 2147483647;
+  box-shadow: 0 0 0 100vmax #fff;
 }
 
 .rep-cover { border-bottom: 3px solid var(--navy); padding-bottom: 14px; margin-bottom: 18px; }
